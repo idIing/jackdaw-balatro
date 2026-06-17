@@ -330,6 +330,9 @@ class TestLiveOracle:
         path = _find_lua()
         if not path:
             pytest.skip("No Lua interpreter found")
+        balatro_src = PROJECT_ROOT / "balatro_source" / "functions" / "misc_functions.lua"
+        if not balatro_src.exists():
+            pytest.skip("Balatro source code not found in balatro_source/")
         return path
 
     @pytest.fixture(scope="class")
