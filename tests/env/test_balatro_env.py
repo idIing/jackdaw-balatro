@@ -185,3 +185,51 @@ def _pick_valid_action(
         card_target=card_target,
         entity_target=entity_target,
     )
+
+
+class TestEnvironmentCheckpointing:
+    def test_env_checkpoint_restore(self, env: BalatroEnvironment) -> None:
+        game_obs, game_mask, info = env.reset()
+        
+        # Save initial state
+        initial_state = env.get_state()
+        
+        # Check initial trackers
+        assert env.episode_length == 0
+        assert env._step_count == 0
+        
+        # Take a step
+        action = _pick_valid_action(game_mask, info)
+        game_obs2, terminated, truncated, game_mask2, info2 = env.step(action)
+        
+        # Trackers should change
+        assert env.episode_length == 1
+        assert env._step_count == 1
+        
+        # Load state back
+        env.load_state(initial_state)
+        
+        # Verify trackers and adapter restored
+        assert env.episode_length == 0
+        assert env._step_count == 0
+        assert env.episode_ante == 1
+        assert env.episode_won is False
+        
+        # Can still step normally
+        action2 = _pick_valid_action(game_mask, info)
+        env.step(action2)
+        assert env.episode_length == 1
+        assert env._step_count == 1
+
+    def test_env_deep_copy_isolation(self, env: BalatroEnvironment) -> None:
+        env.reset()
+        state = env.get_state()
+        
+        # Modifying state dict should not modify env trackers or adapter state
+        state["episode_length"] = 999
+        assert env.episode_length != 999
+        
+        # Modifying adapter state within state dict should not modify env
+        state["adapter_state"]["dollars"] = 999
+        assert env._adapter.raw_state.get("dollars", 0) != 999
+

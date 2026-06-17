@@ -465,3 +465,53 @@ class TestTerminalFlags:
         # Flags must be consistent
         raw_won = adapter.raw_state.get("won", False)
         assert adapter.won == raw_won
+
+
+class TestDirectAdapterCheckpointing:
+    def test_checkpoint_restore(self):
+        adapter = DirectAdapter()
+        adapter.reset(BACK, STAKE, SEED)
+        
+        # Save initial state
+        initial_state = adapter.get_state()
+        
+        # Run some steps
+        from jackdaw.engine.actions import SelectBlind
+        adapter.step(SelectBlind())
+        modified_state = adapter.get_state()
+        
+        # Verify that state actually changed
+        assert initial_state["phase"] != modified_state["phase"]
+        
+        # Restore to initial state
+        adapter.load_state(initial_state)
+        
+        # Verify restored state
+        restored_state = adapter.get_state()
+        assert restored_state["phase"] == initial_state["phase"]
+        assert restored_state["phase"] == GamePhase.BLIND_SELECT
+        
+        # Take step again, verify it can still step properly
+        adapter.step(SelectBlind())
+        assert adapter.raw_state["phase"] == GamePhase.SELECTING_HAND
+
+    def test_deep_copy_isolation(self):
+        adapter = DirectAdapter()
+        adapter.reset(BACK, STAKE, SEED)
+        
+        state1 = adapter.get_state()
+        # Mutate the returned dict
+        state1["phase"] = "MUTATED"
+        
+        # The adapter's internal state shouldn't be affected
+        assert adapter.raw_state["phase"] != "MUTATED"
+        
+        # Save a valid state
+        state2 = adapter.get_state()
+        # Load it
+        adapter.load_state(state2)
+        # Mutate the source dict
+        state2["dollars"] = 999
+        # The adapter's internal state shouldn't be affected
+        assert adapter.raw_state["dollars"] != 999
+

@@ -147,6 +147,25 @@ class BalatroEnvironment:
         }
         return game_obs, terminated, truncated, game_mask, info
 
+    def get_state(self) -> dict[str, Any]:
+        """Return a dict containing a deep copy of the adapter state and environment trackers."""
+        return {
+            "adapter_state": self._adapter.get_state(),
+            "episode_length": self.episode_length,
+            "episode_won": self.episode_won,
+            "episode_ante": self.episode_ante,
+            "_step_count": self._step_count,
+        }
+
+    def load_state(self, state: dict[str, Any]) -> None:
+        """Restore the adapter state and environment trackers from a snapshot dict."""
+        self._adapter.load_state(state["adapter_state"])
+        self.episode_length = state["episode_length"]
+        self.episode_won = state["episode_won"]
+        self.episode_ante = state["episode_ante"]
+        self._step_count = state["_step_count"]
+
+
 
 def _action_mask_to_game(mask: ActionMask) -> GameActionMask:
     """Convert a Balatro ActionMask to a game-agnostic GameActionMask."""

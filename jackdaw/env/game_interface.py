@@ -126,6 +126,15 @@ class GameAdapter(Protocol):
         """True if the run was won."""
         ...
 
+    def get_state(self) -> dict[str, Any]:
+        """Return a copy/snapshot of the adapter's internal state."""
+        ...
+
+    def load_state(self, state: dict[str, Any]) -> None:
+        """Restore the adapter's state from a snapshot."""
+        ...
+
+
 
 # ---------------------------------------------------------------------------
 # DirectAdapter — wraps the engine directly (fast path for training)
@@ -167,6 +176,15 @@ class DirectAdapter:
         from jackdaw.engine.actions import get_legal_actions as engine_legal
 
         return engine_legal(self._gs)
+
+    def get_state(self) -> dict[str, Any]:
+        import copy
+        return copy.deepcopy(self._gs)
+
+    def load_state(self, state: dict[str, Any]) -> None:
+        import copy
+        self._gs = copy.deepcopy(state)
+
 
     @property
     def raw_state(self) -> dict[str, Any]:
@@ -270,6 +288,13 @@ class BridgeAdapter:
     @property
     def won(self) -> bool:
         return bool(self._last_response.get("won", False))
+
+    def get_state(self) -> dict[str, Any]:
+        raise NotImplementedError("BridgeAdapter does not support state checkpointing.")
+
+    def load_state(self, state: dict[str, Any]) -> None:
+        raise NotImplementedError("BridgeAdapter does not support state checkpointing.")
+
 
     # -- internal -----------------------------------------------------------
 
