@@ -136,6 +136,15 @@ def _load_tags() -> dict[str, Any]:
     return _tags_cache
 
 
+_joker_loc_cache: dict[str, Any] | None = None
+
+def _load_joker_loc() -> dict[str, Any]:
+    global _joker_loc_cache  # noqa: PLW0603
+    if _joker_loc_cache is None:
+        from jackdaw.engine.data.prototypes import _load_json
+        _joker_loc_cache = _load_json("joker_loc.json")
+    return _joker_loc_cache
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -191,7 +200,35 @@ def serialize_card(card: Card) -> dict[str, Any]:
 
     # value.effect
     if ability_set == "Joker":
-        effect = card.ability.get("name", "")
+        joker_loc = _load_joker_loc().get(key)
+        if joker_loc:
+            import re
+            text_lines = joker_loc.get("text", [])
+            raw_text = " ".join(text_lines)
+            
+            loc_vars_exprs = joker_loc.get("loc_vars", [])
+            # Evaluate using locals containing `card`
+            _local_env = {"card": card.__dict__} # card is an object, but exprs use card.get() assuming card is a dict.
+            # Wait, `card.get` implies card is a dict!
+            # The python script extract_joker_loc.py used `card.get("ability", {})` assuming `card` is a dictionary!
+            # But here `card` is a `Card` object! `card.ability` is a property/attribute!
+            # Let me just dump card.__dict__ or provide a wrapper.
+            card_dict = {
+                "ability": card.ability,
+                "config": getattr(card, "config", {}),
+                "probabilities_normal": getattr(card.game, "probabilities_normal", 1) if getattr(card, "game", None) else 1
+            }
+            
+            for i, expr in enumerate(loc_vars_exprs):
+                try:
+                    val = eval(expr, {}, {"card": card_dict})
+                except Exception:
+                    val = "?"
+                raw_text = raw_text.replace(f"#{i+1}#", str(val))
+            
+            effect = re.sub(r'\{[^}]*\}', '', raw_text).replace('  ', ' ').strip()
+        else:
+            effect = card.ability.get("name", "")
     elif is_playing_card:
         eff = card.ability.get("effect", "")
         effect = eff if eff else ""
