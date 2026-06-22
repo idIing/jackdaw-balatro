@@ -31,8 +31,7 @@
       "{C:attention}hand{} of round"
     ],
     "loc_vars": [
-      null,
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_ancient": {
@@ -69,8 +68,7 @@
       "the shop are {C:attention}free"
     ],
     "loc_vars": [
-      null,
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_banner": {
@@ -127,8 +125,9 @@
       "{X:mult,C:white} X#3# {} Mult when scored"
     ],
     "loc_vars": [
-      null,
-      "\"\""
+      "str(card.get('config', {}).get('probabilities', {}).get('normal', 1) if 'config' in card else 1)",
+      "card.get(\"ability\", {}).get(\"extra\", 0).get(\"odds\", 0)",
+      "card.get(\"ability\", {}).get(\"extra\", 0).get(\"Xmult\", 0)"
     ]
   },
   "j_blue_joker": {
@@ -150,7 +149,7 @@
       "{C:attention}Joker{} to the right"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_bootstraps": {
@@ -161,7 +160,9 @@
       "{C:inactive}(Currently {C:mult}+#3#{C:inactive} Mult)"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0).get(\"mult\", 0)",
+      "card.get(\"ability\", {}).get(\"extra\", 0).get(\"dollars\", 0)",
+      "card.get(\"ability\", {}).get(\"extra\", 0).get(\"mult*math\", 0).get(\"floor((G\", 0).get(\"GAME\", 0).get(\"dollars + (G\", 0).get(\"GAME\", 0).get(\"dollar_buffer or 0))/self\", 0).get(\"ability\", 0).get(\"extra\", 0).get(\"dollars)\", 0)"
     ]
   },
   "j_brainstorm": {
@@ -171,7 +172,7 @@
       "of leftmost {C:attention}Joker"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_bull": {
@@ -205,8 +206,9 @@
       "poker hand each round"
     ],
     "loc_vars": [
-      null,
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0).get(\"mult\", 0)",
+      "card.get(\"ability\", {}).get(\"extra\", 0).get(\"dollars\", 0)",
+      "card.get(\"ability\", {}).get(\"extra\", 0).get(\"mult*math\", 0).get(\"floor((G\", 0).get(\"GAME\", 0).get(\"dollars + (G\", 0).get(\"GAME\", 0).get(\"dollar_buffer or 0))/self\", 0).get(\"ability\", 0).get(\"extra\", 0).get(\"dollars)\", 0)"
     ]
   },
   "j_business": {
@@ -263,7 +265,7 @@
       "{C:inactive}(Must have room)"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_castle": {
@@ -446,6 +448,9 @@
       "{C:attention}#1#"
     ],
     "loc_vars": [
+      "\"\"",
+      null,
+      null,
       null
     ]
   },
@@ -501,7 +506,8 @@
       "a {C:attention}#2#"
     ],
     "loc_vars": [
-      "\"\""
+      "card.get(\"ability\", {}).get(\"x_mult\", 0)",
+      "card.get(\"ability\", {}).get(\"type\", \"\")"
     ]
   },
   "j_dusk": {
@@ -573,7 +579,8 @@
       "a {C:attention}#2#"
     ],
     "loc_vars": [
-      "\"\""
+      "card.get(\"ability\", {}).get(\"x_mult\", 0)",
+      "card.get(\"ability\", {}).get(\"type\", \"\")"
     ]
   },
   "j_fibonacci": {
@@ -608,7 +615,7 @@
       "{C:hearts}Heart{} card, and {C:spades}Spade{} card"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_fortune_teller": {
@@ -655,7 +662,8 @@
       "{C:inactive}(Currently {X:mult,C:white} X#2# {C:inactive} Mult)"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)",
+      "card.get(\"ability\", {}).get(\"x_mult\", 0)"
     ]
   },
   "j_gluttenous_joker": {
@@ -763,7 +771,7 @@
       "{C:attention}#1#{} additional times"
     ],
     "loc_vars": [
-      "\"\""
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_hiker": {
@@ -786,7 +794,8 @@
       "{C:inactive}(Currently {X:mult,C:white} X#2# {C:inactive} Mult)"
     ],
     "loc_vars": [
-      "\"\""
+      "card.get(\"ability\", {}).get(\"extra\", 0)",
+      "card.get(\"ability\", {}).get(\"x_mult\", 0)"
     ]
   },
   "j_hologram": {
@@ -823,6 +832,9 @@
       "{s:0.8}Card changes every round"
     ],
     "loc_vars": [
+      "card.get(\"ability\", {}).get(\"extra\", 0)",
+      "\"\"",
+      "\"\"",
       null
     ]
   },
@@ -835,7 +847,8 @@
       "{C:inactive}(Currently {C:attention}#2#{C:inactive}/#1#)"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)",
+      "card.get(\"ability\", {}).get(\"invis_rounds\", 0)"
     ]
   },
   "j_joker": {
@@ -903,7 +916,8 @@
       "{C:inactive}(Currently {X:mult,C:white} X#2# {C:inactive} Mult)"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)",
+      "card.get(\"ability\", {}).get(\"x_mult\", 0)"
     ]
   },
   "j_lusty_joker": {
@@ -963,6 +977,10 @@
       "{C:attention}Blind{} is selected"
     ],
     "loc_vars": [
+      "card.get(\"ability\", {}).get(\"extra\", 0).get(\"Xmult\", 0)",
+      "card.get(\"ability\", {}).get(\"extra\", 0).get(\"every + 1\", 0)",
+      "\"\"",
+      null,
       null
     ]
   },
@@ -974,7 +992,7 @@
       "{C:attention}Boss Blind{} ability"
     ],
     "loc_vars": [
-      "\"\""
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_merry_andy": {
@@ -985,7 +1003,8 @@
       "{C:red}#2#{} hand size"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"d_size\", 0)",
+      "card.get(\"ability\", {}).get(\"h_size\", 0)"
     ]
   },
   "j_midas_mask": {
@@ -996,7 +1015,7 @@
       "when scored"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_mime": {
@@ -1030,8 +1049,7 @@
       "{S:1.1,C:red,E:2}self destructs{}"
     ],
     "loc_vars": [
-      null,
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_mystic_summit": {
@@ -1092,7 +1110,7 @@
       "{C:inactive}(ex: {C:green}1 in 3{C:inactive} -> {C:green}2 in 3{C:inactive})"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"h_size\", 0)"
     ]
   },
   "j_order": {
@@ -1103,7 +1121,8 @@
       "a {C:attention}#2#"
     ],
     "loc_vars": [
-      "\"\""
+      "card.get(\"ability\", {}).get(\"x_mult\", 0)",
+      "card.get(\"ability\", {}).get(\"type\", \"\")"
     ]
   },
   "j_pareidolia": {
@@ -1127,7 +1146,7 @@
       "at the end of the {C:attention}shop"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_photograph": {
@@ -1234,7 +1253,7 @@
       "appear multiple times"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_rocket": {
@@ -1283,7 +1302,7 @@
       "{C:inactive}(Currently {C:money}$#2#{C:inactive})"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_scary_face": {
@@ -1329,7 +1348,7 @@
       "card of any other {C:attention}suit"
     ],
     "loc_vars": [
-      "\"\""
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_selzer": {
@@ -1351,7 +1370,7 @@
       "gives {C:mult}+#1#{} Mult"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_shortcut": {
@@ -1423,8 +1442,7 @@
       "played {C:attention}face{} cards"
     ],
     "loc_vars": [
-      null,
-      null
+      "card.get(\"ability\", {}).get(\"extra+1\", 0)"
     ]
   },
   "j_space": {
@@ -1472,6 +1490,7 @@
       "{C:inactive}(Currently {X:mult,C:white} X#2# {C:inactive} Mult)"
     ],
     "loc_vars": [
+      "card.get(\"ability\", {}).get(\"extra\", 0)",
       null
     ]
   },
@@ -1496,7 +1515,8 @@
       "{C:inactive}(Currently {C:chips}+#2#{C:inactive} Chips)"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)",
+      "card.get(\"ability\", {}).get(\"extra*(self\", 0).get(\"ability\", 0).get(\"stone_tally or 0)\", 0)"
     ]
   },
   "j_stuntman": {
@@ -1506,7 +1526,8 @@
       "{C:attention}-#2#{} hand size"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0).get(\"chip_mod\", 0)",
+      "card.get(\"ability\", {}).get(\"extra\", 0).get(\"h_size\", 0)"
     ]
   },
   "j_supernova": {
@@ -1543,8 +1564,7 @@
       "{C:inactive}(Currently {C:mult}+#1#{C:inactive} Mult)"
     ],
     "loc_vars": [
-      null,
-      null
+      "card.get(\"ability\", {}).get(\"mult\", 0)"
     ]
   },
   "j_throwback": {
@@ -1555,7 +1575,8 @@
       "{C:inactive}(Currently {X:mult,C:white} X#2# {C:inactive} Mult)"
     ],
     "loc_vars": [
-      "\"\""
+      "card.get(\"ability\", {}).get(\"extra\", 0)",
+      "card.get(\"ability\", {}).get(\"x_mult\", 0)"
     ]
   },
   "j_ticket": {
@@ -1565,7 +1586,7 @@
       "earn {C:money}$#1#{} when scored"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0)"
     ]
   },
   "j_to_the_moon": {
@@ -1611,7 +1632,8 @@
       "a {C:attention}#2#"
     ],
     "loc_vars": [
-      "\"\""
+      "card.get(\"ability\", {}).get(\"x_mult\", 0)",
+      "card.get(\"ability\", {}).get(\"type\", \"\")"
     ]
   },
   "j_triboulet": {
@@ -1633,7 +1655,8 @@
       "a {C:attention}#2#"
     ],
     "loc_vars": [
-      "\"\""
+      "card.get(\"ability\", {}).get(\"x_mult\", 0)",
+      "card.get(\"ability\", {}).get(\"type\", \"\")"
     ]
   },
   "j_troubadour": {
@@ -1643,6 +1666,7 @@
       "{C:blue}-#2#{} hand each round"
     ],
     "loc_vars": [
+      "card.get(\"ability\", {}).get(\"extra\", 0).get(\"h_size\", 0)",
       null
     ]
   },
@@ -1717,7 +1741,8 @@
       "{C:inactive}(Currently {C:chips}+#1#{C:inactive} Chips)"
     ],
     "loc_vars": [
-      null
+      "card.get(\"ability\", {}).get(\"extra\", 0).get(\"chips\", 0)",
+      "card.get(\"ability\", {}).get(\"extra\", 0).get(\"chip_mod\", 0)"
     ]
   },
   "j_wily": {
