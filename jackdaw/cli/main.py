@@ -54,6 +54,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=0.3,
         help="Seconds between actions for animation watching (default: 0.3)",
     )
+    p_validate.add_argument(
+        "--sim-only",
+        action="store_true",
+        help="Run declared in-process simulator scenarios without BalatroBot",
+    )
 
     return parser
 
@@ -73,6 +78,7 @@ def main(argv: list[str] | None = None) -> None:
                 host=args.host,
                 port=args.port,
                 delay=args.delay,
+                sim_only=args.sim_only,
             )
         )
 

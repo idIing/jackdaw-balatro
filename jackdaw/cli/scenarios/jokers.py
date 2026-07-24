@@ -10,7 +10,7 @@ balatro_source/card.lua (Card:calculate_joker).
 
 from __future__ import annotations
 
-from jackdaw.cli.scenarios import ScenarioResult, register
+from jackdaw.cli.scenarios import Fail, Pass, ScenarioResult, Skip, Witness, register
 from jackdaw.cli.scenarios.helpers import (
     Handle,
     add_both,
@@ -22,6 +22,13 @@ from jackdaw.cli.scenarios.helpers import (
     select_blind,
     set_both,
     start_both,
+)
+from jackdaw.cli.scenarios.sim_helpers import (
+    card_front,
+    observe_certificate_creation,
+    observe_setting_blind_creation,
+    rng_stream_consumed,
+    score_with_and_without_joker,
 )
 
 # ---------------------------------------------------------------------------
@@ -188,6 +195,130 @@ _JOKER_CONFIGS: list[tuple[str, str, str | None]] = [
     ("j_vampire", "x0.1 per enhanced card played, removes enhancement", None),
 ]
 
+
+def _sim_joker() -> ScenarioResult:
+    without_joker, with_joker = score_with_and_without_joker(
+        "j_joker",
+        seed="VALIDATE_JOKER",
+    )
+    observed = with_joker.mult - without_joker.mult
+    # Live expectation: j_joker config + scoring effect (Balatro/game.lua:368,
+    # Balatro/card.lua:3980).
+    witness = Witness(field="score.mult_delta", expected=4, observed=observed)
+    if observed == 4:
+        return Pass(witness, details="j_joker adds exactly +4 Mult")
+    return Fail(witness, details="j_joker Mult contribution differs from live")
+
+
+def _sim_certificate() -> ScenarioResult:
+    observation = observe_certificate_creation(seed="VALIDATE_CERTIFICATE")
+    front = card_front(observation.card)
+    front_consumed = rng_stream_consumed(observation, "cert_fr")
+    # Live expectation: real random front via pseudoseed('cert_fr')
+    # (Balatro/card.lua:2463-2475).
+    front_witness = Witness(
+        field="created_card.front",
+        expected={"front": "rank/suit", "rng_stream": "cert_fr consumed"},
+        observed={"front": front, "rng_stream_consumed": front_consumed},
+    )
+    front_matches = front is not None and front_consumed
+
+    seal_consumed = rng_stream_consumed(observation, "certsl")
+    # Live expectation: random Red/Blue/Gold/Purple seal via pseudoseed('certsl')
+    # (Balatro/card.lua:2463-2475).
+    seal_witness = Witness(
+        field="created_card.seal_provenance",
+        expected={
+            "seal": ("Red", "Blue", "Gold", "Purple"),
+            "rng_stream": "certsl consumed",
+        },
+        observed={
+            "seal": observation.card.seal,
+            "rng_stream_consumed": seal_consumed,
+        },
+    )
+    seal_matches = observation.card.seal in {"Red", "Blue", "Gold", "Purple"} and seal_consumed
+
+    mismatches = [
+        witness
+        for matches, witness in (
+            (front_matches, front_witness),
+            (seal_matches, seal_witness),
+        )
+        if not matches
+    ]
+    if not mismatches:
+        return Pass(
+            front_witness,
+            additional_witnesses=(seal_witness,),
+            details="Certificate creation matches live front and seal provenance",
+        )
+    return Fail(
+        mismatches[0],
+        additional_witnesses=tuple(mismatches[1:]),
+        details=(
+            "Certificate creation differs from live "
+            "(handler force-dispatched: engine never dispatches first_hand_drawn)"
+        ),
+    )
+
+
+def _sim_marble() -> ScenarioResult:
+    observation = observe_setting_blind_creation("j_marble", seed="VALIDATE_MARBLE")
+    front = card_front(observation.card)
+    front_consumed = rng_stream_consumed(observation, "marb_fr")
+    # Live expectation: real random front via pseudoseed('marb_fr')
+    # (Balatro/card.lua:2580-2590).
+    front_witness = Witness(
+        field="created_card.front",
+        expected={"front": "rank/suit", "rng_stream": "marb_fr consumed"},
+        observed={"front": front, "rng_stream_consumed": front_consumed},
+    )
+    front_matches = front is not None and front_consumed
+
+    # Live expectation: m_stone center with engine-canonical "Stone Card" effect
+    # (Balatro/card.lua:2580-2590; jackdaw/engine/hand_eval.py:518).
+    enhancement_witness = Witness(
+        field="created_card.enhancement",
+        expected={"center_key": "m_stone", "effect": "Stone Card"},
+        observed={
+            "center_key": observation.card.center_key,
+            "effect": observation.card.ability.get("effect"),
+        },
+    )
+    enhancement_matches = (
+        observation.card.center_key == "m_stone"
+        and observation.card.ability.get("effect") == "Stone Card"
+    )
+
+    mismatches = [
+        witness
+        for matches, witness in (
+            (front_matches, front_witness),
+            (enhancement_matches, enhancement_witness),
+        )
+        if not matches
+    ]
+    if not mismatches:
+        return Pass(
+            front_witness,
+            additional_witnesses=(enhancement_witness,),
+            details="Marble creation matches live front and Stone enhancement",
+        )
+    return Fail(
+        mismatches[0],
+        additional_witnesses=tuple(mismatches[1:]),
+        details="Marble creation differs from live",
+    )
+
+
+_SIM_RUNNERS = {
+    "j_joker": _sim_joker,
+    "j_certificate": _sim_certificate,
+    "j_marble": _sim_marble,
+}
+
+
 for _key, _desc, _preset in _JOKER_CONFIGS:
 
     def _make_fn(key: str = _key, preset: str | None = _preset):  # noqa: B023
@@ -200,6 +331,7 @@ for _key, _desc, _preset in _JOKER_CONFIGS:
         name=f"joker_{_key[2:]}",  # strip j_ prefix
         category="jokers",
         description=_desc,
+        run_sim=_SIM_RUNNERS.get(_key),
     )(_make_fn(_key, _preset))
 
 
@@ -489,7 +621,7 @@ def _joker_todo_list(sim: Handle, live: Handle, *, delay: float = 0.3) -> Scenar
 def _joker_luchador(sim: Handle, live: Handle, *, delay: float = 0.3) -> ScenarioResult:
     # Luchador requires selling during a round (SELECTING_HAND), but the
     # balatrobot API only supports sell in SHOP state.  Skip this scenario.
-    return ScenarioResult(
-        passed=True,
-        details="Luchador: SKIP (balatrobot sell API requires SHOP state)",
+    return Skip(
+        "balatrobot sell API requires SHOP state",
+        details="Luchador requires selling during a round",
     )

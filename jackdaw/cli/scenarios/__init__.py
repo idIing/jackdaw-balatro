@@ -8,21 +8,162 @@ resulting game state.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
 
 
-@dataclass
 class ScenarioResult:
-    """Outcome of a single scenario run."""
+    """Outcome of a scenario run.
 
-    passed: bool
-    diffs: list[str] = field(default_factory=list)
-    details: str = ""
-    sub_results: list[tuple[str, ScenarioResult]] = field(default_factory=list)
+    Calling this legacy constructor maps an old successful comparison to
+    ``SKIP(unwitnessed)``. New witnessed results use :class:`Pass`,
+    :class:`Fail`, or :class:`Skip` directly.
+    """
+
+    status: Status
+    witnesses: tuple[Witness, ...]
+    diffs: list[str]
+    details: str
+    sub_results: list[tuple[str, ScenarioResult]]
+    skip_reason: str | None
+
+    def __init__(
+        self,
+        *,
+        passed: bool,
+        diffs: list[str] | None = None,
+        details: str = "",
+        sub_results: list[tuple[str, ScenarioResult]] | None = None,
+    ) -> None:
+        self.diffs = list(diffs or [])
+        self.details = details
+        self.sub_results = list(sub_results or [])
+        if passed:
+            self.status = Status.SKIP
+            self.witnesses = ()
+            self.skip_reason = "unwitnessed"
+        else:
+            self.status = Status.FAIL
+            self.witnesses = (
+                Witness(
+                    field="legacy_state_comparison",
+                    expected="sim and live observations match",
+                    observed=self.diffs or details or "mismatch reported",
+                ),
+            )
+            self.skip_reason = None
+
+    @property
+    def passed(self) -> bool:
+        """Compatibility property; only a witnessed PASS is true."""
+        return self.status is Status.PASS
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the complete validation result."""
+        if self.status is Status.PASS and not self.witnesses:
+            raise ValueError("witnessless PASS cannot serialize")
+        return {
+            "status": self.status.value,
+            "witnesses": [witness.to_dict() for witness in self.witnesses],
+            "skip_reason": self.skip_reason,
+            "diffs": list(self.diffs),
+            "details": self.details,
+            "sub_results": [
+                {"name": name, "result": result.to_dict()} for name, result in self.sub_results
+            ],
+        }
+
+
+class Status(StrEnum):
+    """Validation status."""
+
+    PASS = "PASS"
+    FAIL = "FAIL"
+    SKIP = "SKIP"
+
+
+@dataclass(frozen=True)
+class Witness:
+    """A field-level expected-versus-observed comparison."""
+
+    field: str
+    expected: Any
+    observed: Any
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "field": self.field,
+            "expected": self.expected,
+            "observed": self.observed,
+        }
+
+
+class Pass(ScenarioResult):
+    """A witnessed successful comparison."""
+
+    def __init__(
+        self,
+        witness: Witness,
+        *,
+        additional_witnesses: tuple[Witness, ...] = (),
+        details: str = "",
+        sub_results: list[tuple[str, ScenarioResult]] | None = None,
+    ) -> None:
+        if not isinstance(witness, Witness):
+            raise TypeError("PASS requires a Witness")
+        self.status = Status.PASS
+        self.witnesses = (witness, *additional_witnesses)
+        self.diffs = []
+        self.details = details
+        self.sub_results = list(sub_results or [])
+        self.skip_reason = None
+
+
+class Fail(ScenarioResult):
+    """A witnessed observed mismatch."""
+
+    def __init__(
+        self,
+        witness: Witness,
+        *,
+        additional_witnesses: tuple[Witness, ...] = (),
+        diffs: list[str] | None = None,
+        details: str = "",
+        sub_results: list[tuple[str, ScenarioResult]] | None = None,
+    ) -> None:
+        if not isinstance(witness, Witness):
+            raise TypeError("FAIL requires a Witness")
+        self.status = Status.FAIL
+        self.witnesses = (witness, *additional_witnesses)
+        self.diffs = list(diffs or [])
+        self.details = details
+        self.sub_results = list(sub_results or [])
+        self.skip_reason = None
+
+
+class Skip(ScenarioResult):
+    """A scenario that could not make a witnessed comparison."""
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        details: str = "",
+        sub_results: list[tuple[str, ScenarioResult]] | None = None,
+    ) -> None:
+        if not reason:
+            raise ValueError("SKIP requires a reason")
+        self.status = Status.SKIP
+        self.witnesses = ()
+        self.diffs = []
+        self.details = details
+        self.sub_results = list(sub_results or [])
+        self.skip_reason = reason
 
 
 @dataclass
@@ -33,6 +174,7 @@ class Scenario:
     category: str
     description: str
     run: Callable[..., ScenarioResult]
+    run_sim: Callable[[], ScenarioResult] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -46,11 +188,20 @@ def register(
     name: str,
     category: str,
     description: str,
+    run_sim: Callable[[], ScenarioResult] | None = None,
 ) -> Callable:
     """Decorator that registers a scenario function."""
 
     def decorator(fn: Callable) -> Callable:
-        _REGISTRY.append(Scenario(name=name, category=category, description=description, run=fn))
+        _REGISTRY.append(
+            Scenario(
+                name=name,
+                category=category,
+                description=description,
+                run=fn,
+                run_sim=run_sim,
+            )
+        )
         return fn
 
     return decorator
