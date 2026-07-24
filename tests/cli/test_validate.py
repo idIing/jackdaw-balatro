@@ -2,7 +2,21 @@
 
 from __future__ import annotations
 
-from jackdaw.cli.scenarios import ScenarioResult, get_all_scenarios, get_scenarios
+import json
+
+import pytest
+
+from jackdaw.cli.scenarios import (
+    Fail,
+    Pass,
+    ScenarioResult,
+    Skip,
+    Status,
+    Witness,
+    get_all_scenarios,
+    get_scenarios,
+)
+from jackdaw.cli.validate import summarize_results
 
 
 class TestScenarioRegistry:
@@ -85,12 +99,53 @@ class TestScenarioCoverage:
 
 
 class TestScenarioResult:
-    def test_passed_result(self) -> None:
+    def test_legacy_pass_is_unwitnessed_skip(self) -> None:
         r = ScenarioResult(passed=True)
-        assert r.passed
-        assert r.diffs == []
-
-    def test_failed_result(self) -> None:
-        r = ScenarioResult(passed=False, diffs=["money: sim=10 live=12"])
+        assert r.status is Status.SKIP
+        assert r.skip_reason == "unwitnessed"
         assert not r.passed
-        assert len(r.diffs) == 1
+
+    def test_pass_requires_witness(self) -> None:
+        with pytest.raises(TypeError, match="PASS requires a Witness"):
+            Pass(None)  # type: ignore[arg-type]
+
+    def test_legacy_mismatch_stays_failed_with_witness(self) -> None:
+        r = ScenarioResult(passed=False, diffs=["money: sim=10 live=12"])
+        assert r.status is Status.FAIL
+        assert r.witnesses
+        assert r.diffs == ["money: sim=10 live=12"]
+
+    def test_serialization_and_aggregation(self) -> None:
+        passed = Pass(Witness("score.mult_delta", 4, 4))
+        failed = Fail(Witness("created_card.front", "rank/suit", None))
+        skipped = Skip("no sim support")
+
+        serialized = [result.to_dict() for result in (passed, failed, skipped)]
+        assert [result["status"] for result in serialized] == ["PASS", "FAIL", "SKIP"]
+        assert serialized[0]["witnesses"] == [
+            {"field": "score.mult_delta", "expected": 4, "observed": 4}
+        ]
+        assert serialized[2]["skip_reason"] == "no sim support"
+        json.dumps(serialized)
+
+        counts = summarize_results((passed, failed, skipped))
+        assert (counts.passed, counts.failed, counts.skipped) == (1, 1, 1)
+        assert counts.denominator == 2
+        assert counts.pass_rate == 0.5
+
+    def test_witnessless_pass_is_rejected_at_boundaries(self) -> None:
+        # Constructors already forbid this; the reporting boundary fails loud
+        # if a result was mutated after construction.
+        tampered = Skip("no sim support")
+        tampered.status = Status.PASS
+        with pytest.raises(ValueError, match="witnessless PASS"):
+            summarize_results((tampered,))
+        with pytest.raises(ValueError, match="witnessless PASS"):
+            tampered.to_dict()
+
+    def test_nested_sub_results_are_counted(self) -> None:
+        leaf_fail = Fail(Witness("f", 1, 2))
+        middle = Skip("container", sub_results=[("leaf", leaf_fail)])
+        outer = Skip("outer", sub_results=[("middle", middle)])
+        counts = summarize_results((outer,))
+        assert (counts.passed, counts.failed, counts.skipped) == (0, 1, 0)
