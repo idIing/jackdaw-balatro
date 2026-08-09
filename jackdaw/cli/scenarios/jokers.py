@@ -18,6 +18,7 @@ from jackdaw.cli.scenarios.helpers import (
     discard,
     get_hand_count,
     play_hand,
+    run_blind_select_joker,
     run_joker_with_setup,
     select_blind,
     set_both,
@@ -319,9 +320,43 @@ _SIM_RUNNERS = {
 }
 
 
+# Jokers whose effect fires during blind selection.  The generic setup adds the
+# joker *after* selecting the blind, so for these the trigger has already passed
+# and the scenario tests nothing — both backends agree that nothing happened.
+# They get the corrected setup path instead; see `helpers.run_blind_select_joker`
+# for why simply adding earlier is not an option.
+#
+#   setting_blind    -- jackdaw/engine/jokers.py:1773, 1847, 1945, 1987, 2012,
+#                       2185, 2211
+#   first_hand_drawn -- j_certificate (jokers.py:1924, card.lua:2462); a
+#                       different flag, but it fires in the same SelectBlind
+#                       step (jackdaw/engine/game.py:171-229)
+_BLIND_SELECT_JOKERS = frozenset(
+    {
+        "j_madness",
+        "j_ceremonial",
+        "j_marble",
+        "j_riff_raff",
+        "j_cartomancer",
+        "j_chicot",
+        "j_burglar",
+        "j_certificate",
+    }
+)
+
+
 for _key, _desc, _preset in _JOKER_CONFIGS:
 
     def _make_fn(key: str = _key, preset: str | None = _preset):  # noqa: B023
+        if key in _BLIND_SELECT_JOKERS:
+
+            def blind_select_fn(
+                sim: Handle, live: Handle, *, delay: float = 0.3
+            ) -> ScenarioResult:
+                return run_blind_select_joker(sim, live, joker_key=key, delay=delay)
+
+            return blind_select_fn
+
         def fn(sim: Handle, live: Handle, *, delay: float = 0.3) -> ScenarioResult:
             return run_joker_with_setup(sim, live, joker_key=key, hand_preset=preset, delay=delay)
 

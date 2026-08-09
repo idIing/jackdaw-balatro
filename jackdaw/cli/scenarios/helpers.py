@@ -11,7 +11,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from jackdaw.cli.scenarios import ScenarioResult
+from jackdaw.cli.scenarios import ScenarioResult, Skip
 
 # Type alias for backend handle functions
 Handle = Callable[[str, dict[str, Any] | None], dict[str, Any]]
@@ -451,6 +451,96 @@ def run_joker_with_setup(
         passed=len(diffs) == 0,
         diffs=diffs,
         details=f"Joker {joker_key}: {'PASS' if not diffs else 'FAIL'}",
+    )
+
+
+def _current_blind_score(handle: Handle) -> int:
+    """Chip requirement of the blind currently being played."""
+    blinds = handle("gamestate", None).get("blinds", {})
+    for blind in blinds.values():
+        if blind.get("status") == "CURRENT":
+            return int(blind.get("score", 0))
+    return 0
+
+
+def run_blind_select_joker(
+    sim: Handle,
+    live: Handle,
+    *,
+    joker_key: str,
+    seed: str = "",
+    delay: float = _DEFAULT_DELAY,
+) -> ScenarioResult:
+    """Scenario for a joker whose effect fires *during* blind selection.
+
+    ``run_joker_with_setup`` selects the blind and only then adds the joker, so
+    for these jokers the effect has already fired by the time the joker exists —
+    the scenario then compares two backends that both did nothing.  It cannot
+    simply add first: balatrobot's ``add`` rejects ``BLIND_SELECT``, allowing
+    only ``SELECTING_HAND``/``SHOP``/``ROUND_EVAL`` (``endpoints/add.lua:164``).
+
+    So round 1 is played out, the joker is added in the shop that follows, and
+    the comparison is made on the *second* blind selection — the first one the
+    joker is present for.  Round 1 is not perturbed, because the joker does not
+    exist yet.
+
+    Applies to the ``setting_blind`` jokers (``jackdaw/engine/jokers.py:1773,
+    1847, 1945, 1987, 2012, 2185, 2211``) and to Certificate, which fires on
+    ``first_hand_drawn`` (``jokers.py:1924``) — also during the ``SelectBlind``
+    step (``jackdaw/engine/game.py:171-229``).
+    """
+    if not seed:
+        seed = f"BS_{joker_key.upper()}"
+
+    start_both(sim, live, seed=seed, delay=delay)
+
+    # -- Round 1: no joker owned; played only to reach a shop --
+    select_blind(sim, live, delay=delay)
+    # Force the chip total to the blind's own requirement so one hand ends the
+    # round.  Deliberately not an arbitrarily large number: live animates the
+    # score count-up, and a huge value overruns the bridge's hardcoded 10 s read
+    # timeout (``jackdaw/bridge/backend.py:403``).
+    set_both(sim, live, chips=_current_blind_score(sim))
+    play_hand(sim, live, [0, 1, 2, 3, 4], delay=delay)
+
+    state = get_state(sim)
+    if state != "ROUND_EVAL":
+        return Skip(
+            f"round 1 did not reach ROUND_EVAL (got {state})",
+            details=f"cannot reach a shop to add {joker_key} before the next blind",
+        )
+    cash_out(sim, live, delay=delay)
+
+    state = get_state(sim)
+    if state != "SHOP":
+        return Skip(
+            f"expected SHOP after cash out, got {state}",
+            details="the joker must be added somewhere the bridge accepts it",
+        )
+
+    # Round 1 is played before the joker exists, so the backends could already
+    # have drifted for reasons that have nothing to do with it.  Check that
+    # first, otherwise an upstream divergence gets misattributed to the joker.
+    pre_diffs = compare_state(sim, live, label=f"in shop, before adding {joker_key}")
+    if pre_diffs:
+        return Skip(
+            "sim and live already diverged before the joker was added",
+            details=(
+                f"cannot attribute anything to {joker_key}: the backends differ in the shop "
+                f"at the end of round 1 — {pre_diffs}"
+            ),
+        )
+
+    # -- Add where `add` is legal, then meet the next blind already owning it --
+    add_both(sim, live, key=joker_key)
+    next_round(sim, live, delay=delay)
+    select_blind(sim, live, delay=delay)
+
+    diffs = compare_state(sim, live, label=f"after blind select owning {joker_key}")
+    return ScenarioResult(
+        passed=not diffs,
+        diffs=diffs,
+        details=f"Blind-select joker {joker_key}: {'PASS' if not diffs else 'FAIL'}",
     )
 
 
