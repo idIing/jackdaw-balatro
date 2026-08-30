@@ -129,7 +129,7 @@ class TestJoker:
         assert result["label"] == "Joker"
         assert result["value"]["suit"] is None
         assert result["value"]["rank"] is None
-        assert result["value"]["effect"] == "Joker"
+        assert result["value"]["effect"] == "+4 Mult"
         assert result["modifier"]["edition"] == "FOIL"
         assert result["modifier"]["enhancement"] is None
 
