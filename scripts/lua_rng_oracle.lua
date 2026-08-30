@@ -132,6 +132,7 @@ end
 local STREAM_KEYS = {
   "boss", "shuffle", "lucky_mult", "rarity1", "stdset1",
   "cdt1", "front1", "edition_generic",
+  "cert_fr", "certsl", "marb_fr",
 }
 
 local PREDICT_PAIRS = {
