@@ -538,7 +538,20 @@ class TestFixtureOracle:
         """Sanity check: fixture has the data we expect."""
         assert fixture["seed"] == "TESTSEED"
         assert "hashed_seed" in fixture
-        assert len(fixture["pseudoseed"]) == 8
+        fixture_streams = set(fixture["pseudoseed"])
+        core_streams = {
+            "boss",
+            "shuffle",
+            "lucky_mult",
+            "rarity1",
+            "stdset1",
+            "cdt1",
+            "front1",
+            "edition_generic",
+        }
+        pending_streams = {"cert_fr", "certsl", "marb_fr"}
+        assert core_streams <= fixture_streams
+        assert fixture_streams <= core_streams | pending_streams
         assert len(fixture["pseudoseed"]["boss"]) == 10
         assert len(fixture["predict_seed"]) == 3
 
@@ -577,6 +590,9 @@ class TestLiveLuaOracle:
             "cdt1",
             "front1",
             "edition_generic",
+            "cert_fr",
+            "certsl",
+            "marb_fr",
         ],
     )
     def test_pseudoseed_sequence(self, oracle_data, stream_key):
