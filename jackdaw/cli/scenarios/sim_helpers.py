@@ -8,8 +8,6 @@ from typing import Any
 from jackdaw.engine.actions import PlayHand, SelectBlind
 from jackdaw.engine.card import Card
 from jackdaw.engine.card_factory import create_joker
-from jackdaw.engine.game import _apply_setting_blind_mutations
-from jackdaw.engine.jokers import GameSnapshot, JokerContext, calculate_joker
 from jackdaw.engine.scoring import ScoreResult
 from jackdaw.env.game_interface import DirectAdapter
 
@@ -79,33 +77,12 @@ def observe_setting_blind_creation(
 
 
 def observe_certificate_creation(*, seed: str) -> CreatedCardObservation:
-    """Exercise Certificate's registered first-hand-drawn creation path.
-
-    The engine does not currently dispatch ``first_hand_drawn``. This helper
-    drives the registered handler and the engine's existing mutation applicator
-    explicitly, without changing the frozen engine.
-    """
+    """Exercise Certificate through the engine's first-hand-drawn dispatch."""
     adapter = controlled_adapter(seed)
-    certificate = inject_joker(adapter, "j_certificate")
-    adapter.step(SelectBlind())
+    inject_joker(adapter, "j_certificate")
     before_ids = _playing_card_ids(adapter.raw_state)
     rng_before = adapter.raw_state["rng"].get_state()
-
-    result = calculate_joker(
-        certificate,
-        JokerContext(
-            first_hand_drawn=True,
-            jokers=adapter.raw_state["jokers"],
-            game=GameSnapshot(),
-        ),
-    )
-    if result is None or result.extra is None:
-        raise RuntimeError("Certificate did not emit its first_hand_drawn creation mutation")
-    _apply_setting_blind_mutations(
-        adapter.raw_state,
-        [result.extra],
-        adapter.raw_state["jokers"],
-    )
+    adapter.step(SelectBlind())
     return _created_card_observation(adapter, before_ids, rng_before)
 
 
@@ -115,8 +92,8 @@ def card_front(card: Card) -> dict[str, Any] | None:
         return None
     return {
         "card_key": card.card_key,
-        "suit": card.base.suit,
-        "rank": card.base.value,
+        "suit": card.base.suit.value,
+        "rank": card.base.rank.value,
     }
 
 

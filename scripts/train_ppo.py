@@ -13,11 +13,13 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import multiprocessing
 from pathlib import Path
 
 import numpy as np
 from sb3_contrib import MaskablePPO
 from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.vec_env import SubprocVecEnv
 
 from jackdaw.env.game_interface import DirectAdapter
 from jackdaw.env.gymnasium_wrapper import BalatroGymnasiumEnv
@@ -67,21 +69,27 @@ def main() -> None:
     parser.add_argument("--log-dir", type=str, default="runs/balatro_ppo")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--max-steps", type=int, default=10_000)
-    parser.add_argument("--num-envs", type=int, default=0, help="Number of parallel environments (0 for CPU count)")
+    parser.add_argument(
+        "--num-envs",
+        type=int,
+        default=0,
+        help="Number of parallel environments (0 for CPU count)",
+    )
     args = parser.parse_args()
 
     log_path = Path(args.log_dir)
     log_path.mkdir(parents=True, exist_ok=True)
 
-    import multiprocessing
-    from stable_baselines3.common.vec_env import SubprocVecEnv
-
     num_envs = args.num_envs if args.num_envs > 0 else multiprocessing.cpu_count()
-    print(f"Detected {multiprocessing.cpu_count()} CPU cores. Creating {num_envs} parallel environments...")
+    print(
+        f"Detected {multiprocessing.cpu_count()} CPU cores. "
+        f"Creating {num_envs} parallel environments..."
+    )
 
     def make_env_fn(rank: int, seed: int):
         def _init():
             return make_env(seed=seed + rank, max_steps=args.max_steps)
+
         return _init
 
     if num_envs > 1:

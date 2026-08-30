@@ -20,22 +20,20 @@ def test_joker_control_passes_with_witness() -> None:
     assert result.witnesses[0].observed == 4
 
 
-# The two FAIL tests below pin the RECORDED divergences
-# (docs/research_findings/self-play-sim.md, 2026-07-13): when the faithful engine
-# fix lands they will fail loudly and must be updated in the same change that
-# updates the evidence log — that is intended divergence-tracking, not fragility.
-def test_certificate_fails_with_field_witnesses() -> None:
+# Canonical PR #8 closed these recorded divergences. Keep the field witnesses
+# as positive regression checks rather than preserving the old expected FAILs.
+def test_certificate_passes_with_field_witnesses() -> None:
     result = _run_sim("joker_certificate")
-    assert result.status is Status.FAIL
+    assert result.status is Status.PASS
     assert {witness.field for witness in result.witnesses} == {
         "created_card.front",
         "created_card.seal_provenance",
     }
 
 
-def test_marble_fails_with_field_witnesses() -> None:
+def test_marble_passes_with_field_witnesses() -> None:
     result = _run_sim("joker_marble")
-    assert result.status is Status.FAIL
+    assert result.status is Status.PASS
     assert {witness.field for witness in result.witnesses} == {
         "created_card.front",
         "created_card.enhancement",
@@ -56,10 +54,10 @@ def test_sim_only_never_constructs_live_backend(monkeypatch, capsys) -> None:
         raise AssertionError("sim-only constructed LiveBackend")
 
     monkeypatch.setattr(backend, "LiveBackend", forbidden_live_backend)
-    assert run_validate(sim_only=True) == 1
+    assert run_validate(sim_only=True) == 0
     output = capsys.readouterr().out
     assert "Running 3 scenario(s)" in output
-    assert "PASS=1, FAIL=2, SKIP=0" in output
+    assert "PASS=3, FAIL=0, SKIP=0" in output
 
 
 def test_unsupported_sim_scenario_is_skip(capsys) -> None:
