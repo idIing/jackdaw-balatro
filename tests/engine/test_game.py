@@ -215,6 +215,39 @@ class TestSellCard:
         with pytest.raises(IllegalActionError, match="eternal"):
             step(gs, SellCard(area="jokers", card_index=0))
 
+    def test_selling_diet_cola_dispatches_selling_self(self):
+        gs = _init_gs()
+        gs["phase"] = GamePhase.SHOP
+        gs["tags"] = []
+        cola = Card()
+        cola.set_ability("j_diet_cola")
+        cola.center_key = "j_diet_cola"
+        cola.sell_cost = 2
+        gs["jokers"] = [cola]
+
+        step(gs, SellCard(area="jokers", card_index=0))
+
+        assert [tag.key for tag in gs["tags"]] == ["tag_double"]
+
+    def test_selling_invisible_joker_duplicates_another_joker(self):
+        gs = _init_gs()
+        gs["phase"] = GamePhase.SHOP
+        original = Card()
+        original.set_ability("j_joker")
+        original.center_key = "j_joker"
+        invisible = Card()
+        invisible.set_ability("j_invisible")
+        invisible.center_key = "j_invisible"
+        invisible.ability["invis_rounds"] = invisible.ability["extra"]
+        gs["jokers"] = [original, invisible]
+
+        step(gs, SellCard(area="jokers", card_index=1))
+
+        assert [joker.center_key for joker in gs["jokers"]] == ["j_joker", "j_joker"]
+        assert gs["jokers"][0] is original
+        assert gs["jokers"][1] is not original
+        assert "invisible" in gs["rng"].get_state()
+
 
 # ---------------------------------------------------------------------------
 # NextRound

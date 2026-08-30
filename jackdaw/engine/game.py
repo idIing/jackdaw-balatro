@@ -1273,6 +1273,11 @@ def _handle_sell_card(gs: dict[str, Any], area: str, idx: int) -> dict[str, Any]
     if getattr(card, "eternal", False):
         raise IllegalActionError("Cannot sell eternal card")
 
+    # Live Card:sell_card dispatches selling_self before the sold card is
+    # removed (card.lua:1599). Apply the returned mutation at that point too.
+    selling_self_mutations = _fire_selling_self(gs, card)
+    _apply_selling_self_mutations(gs, card, selling_self_mutations)
+
     gs["dollars"] = gs.get("dollars", 0) + card.sell_cost
     cards.pop(idx)
     card.remove_from_deck(gs)
@@ -1288,6 +1293,88 @@ def _handle_sell_card(gs: dict[str, Any], area: str, idx: int) -> dict[str, Any]
     _fire_shop_joker_context(gs, selling_card=True)
 
     return gs
+
+
+def _fire_selling_self(gs: dict[str, Any], card: Any) -> list[dict[str, Any]]:
+    """Dispatch ``selling_self`` for the sold card while it remains owned."""
+    from jackdaw.engine.jokers import GameSnapshot, JokerContext, calculate_joker
+
+    jokers: list = gs.get("jokers", [])
+    cr = gs.get("current_round", {})
+    result = calculate_joker(
+        card,
+        JokerContext(
+            selling_self=True,
+            blind=gs.get("blind"),
+            jokers=jokers,
+            game=GameSnapshot(
+                joker_count=len(jokers),
+                joker_slots=gs.get("joker_slots", 5),
+                money=gs.get("dollars", 0),
+                hands_played=cr.get("hands_played", 0),
+                discards_used=cr.get("discards_used", 0),
+            ),
+            rng=gs.get("rng"),
+        ),
+    )
+    if result and result.extra:
+        return [result.extra]
+    return []
+
+
+def _apply_selling_self_mutations(
+    gs: dict[str, Any],
+    sold_card: Any,
+    mutations: list[dict[str, Any]],
+) -> None:
+    """Apply Luchador, Invisible Joker, and Diet Cola sell effects."""
+    for mutation in mutations:
+        if mutation.get("disable_blind"):
+            _disable_active_blind(gs)
+
+        if mutation.get("duplicate_random_joker"):
+            jokers: list = gs.get("jokers", [])
+            candidates = [joker for joker in jokers if joker is not sold_card]
+            rng = gs.get("rng")
+            if candidates and len(jokers) <= gs.get("joker_slots", 5) and rng is not None:
+                import copy
+
+                chosen, _ = rng.element(candidates, rng.seed("invisible"))
+                duplicate = copy.deepcopy(chosen)
+                if "invis_rounds" in duplicate.ability:
+                    duplicate.ability["invis_rounds"] = 0
+                duplicate.add_to_deck(gs)
+                jokers.append(duplicate)
+
+        create = mutation.get("create", {})
+        if create.get("type") == "Tag":
+            from jackdaw.engine.tags import Tag
+
+            tags = gs.get("tags", [])
+            if not isinstance(tags, list):
+                tags = list(tags.values()) if isinstance(tags, dict) else list(tags)
+                gs["tags"] = tags
+            tags.append(Tag(create["key"]))
+
+
+def _disable_active_blind(gs: dict[str, Any]) -> None:
+    """Disable the current blind and apply its returned restorations."""
+    blind = gs.get("blind")
+    if blind is None:
+        return
+
+    playing_cards = []
+    for area in ("deck", "hand", "play", "discard_pile"):
+        playing_cards.extend(gs.get(area, []))
+    effects = blind.disable(playing_cards=playing_cards, joker_cards=gs.get("jokers", []))
+
+    cr = gs.get("current_round", {})
+    cr["discards_left"] = cr.get("discards_left", 0) + effects.get("restore_discards", 0)
+    cr["hands_left"] = cr.get("hands_left", 0) + effects.get("restore_hands", 0)
+    gs["hand_size"] = gs.get("hand_size", 0) + effects.get("restore_hand_size", 0)
+    if effects.get("clear_forced"):
+        for card in playing_cards:
+            card.ability.pop("forced_selection", None)
 
 
 def _handle_use_consumable(
