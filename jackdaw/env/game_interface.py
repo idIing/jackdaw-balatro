@@ -15,6 +15,7 @@ Architecture::
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
@@ -127,11 +128,15 @@ class GameAdapter(Protocol):
         ...
 
     def get_state(self) -> dict[str, Any]:
-        """Return a copy/snapshot of the adapter's internal state."""
+        """Return an isolated, in-process checkpoint of the adapter state.
+
+        Checkpoints are only guaranteed to round-trip within the current
+        Jackdaw version. They are not a stable serialization format.
+        """
         ...
 
     def load_state(self, state: dict[str, Any]) -> None:
-        """Restore the adapter's state from a snapshot."""
+        """Restore an isolated checkpoint produced by :meth:`get_state`."""
         ...
 
 
@@ -178,11 +183,9 @@ class DirectAdapter:
         return engine_legal(self._gs)
 
     def get_state(self) -> dict[str, Any]:
-        import copy
         return copy.deepcopy(self._gs)
 
     def load_state(self, state: dict[str, Any]) -> None:
-        import copy
         self._gs = copy.deepcopy(state)
 
 

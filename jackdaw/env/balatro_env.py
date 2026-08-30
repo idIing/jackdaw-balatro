@@ -148,9 +148,15 @@ class BalatroEnvironment:
         return game_obs, terminated, truncated, game_mask, info
 
     def get_state(self) -> dict[str, Any]:
-        """Return a dict containing a deep copy of the adapter state and environment trackers."""
+        """Return an isolated, in-process checkpoint of this environment.
+
+        The checkpoint restores the engine (including its RNG streams) and
+        all environment-owned counters. It is not a cross-version save-file
+        format; callers should treat its contents as opaque.
+        """
         return {
             "adapter_state": self._adapter.get_state(),
+            "_episode_count": self._episode_count,
             "episode_length": self.episode_length,
             "episode_won": self.episode_won,
             "episode_ante": self.episode_ante,
@@ -160,6 +166,7 @@ class BalatroEnvironment:
     def load_state(self, state: dict[str, Any]) -> None:
         """Restore the adapter state and environment trackers from a snapshot dict."""
         self._adapter.load_state(state["adapter_state"])
+        self._episode_count = state["_episode_count"]
         self.episode_length = state["episode_length"]
         self.episode_won = state["episode_won"]
         self.episode_ante = state["episode_ante"]

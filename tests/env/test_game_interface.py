@@ -10,6 +10,7 @@ Covers:
 
 from __future__ import annotations
 
+import pickle
 import random
 
 import pytest
@@ -468,44 +469,43 @@ class TestTerminalFlags:
 
 
 class TestDirectAdapterCheckpointing:
-    def test_checkpoint_restore(self):
+    def test_checkpoint_restore_replays_rng_exactly(self):
         adapter = DirectAdapter()
         adapter.reset(BACK, STAKE, SEED)
-        
-        # Save initial state
+
         initial_state = adapter.get_state()
-        
-        # Run some steps
-        from jackdaw.engine.actions import SelectBlind
+        initial_bytes = pickle.dumps(initial_state, protocol=5)
         adapter.step(SelectBlind())
-        modified_state = adapter.get_state()
-        
-        # Verify that state actually changed
-        assert initial_state["phase"] != modified_state["phase"]
-        
-        # Restore to initial state
+        first_trajectory_state = adapter.get_state()
+        first_trajectory_bytes = pickle.dumps(first_trajectory_state, protocol=5)
+        first_legal_actions = adapter.get_legal_actions()
+
+        assert initial_state["phase"] != first_trajectory_state["phase"]
+
         adapter.load_state(initial_state)
-        
-        # Verify restored state
-        restored_state = adapter.get_state()
-        assert restored_state["phase"] == initial_state["phase"]
-        assert restored_state["phase"] == GamePhase.BLIND_SELECT
-        
-        # Take step again, verify it can still step properly
+        assert pickle.dumps(adapter.get_state(), protocol=5) == initial_bytes
+
+        # Selecting a blind consumes the streams used to draw the opening
+        # hand. Exact equality after replay therefore covers engine state,
+        # materialized draws, and RNG restoration together.
         adapter.step(SelectBlind())
-        assert adapter.raw_state["phase"] == GamePhase.SELECTING_HAND
+        assert pickle.dumps(adapter.get_state(), protocol=5) == first_trajectory_bytes
+        assert (
+            adapter.get_state()["rng"].get_state()
+            == first_trajectory_state["rng"].get_state()
+        )
+        assert adapter.get_legal_actions() == first_legal_actions
 
     def test_deep_copy_isolation(self):
         adapter = DirectAdapter()
         adapter.reset(BACK, STAKE, SEED)
-        
+
         state1 = adapter.get_state()
         # Mutate the returned dict
         state1["phase"] = "MUTATED"
         
         # The adapter's internal state shouldn't be affected
         assert adapter.raw_state["phase"] != "MUTATED"
-        
         # Save a valid state
         state2 = adapter.get_state()
         # Load it
@@ -514,4 +514,3 @@ class TestDirectAdapterCheckpointing:
         state2["dollars"] = 999
         # The adapter's internal state shouldn't be affected
         assert adapter.raw_state["dollars"] != 999
-
