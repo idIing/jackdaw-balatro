@@ -10,6 +10,7 @@ Covers:
 
 from __future__ import annotations
 
+import pickle
 import random
 
 import numpy as np
@@ -189,42 +190,38 @@ def _pick_valid_action(
 
 class TestEnvironmentCheckpointing:
     def test_env_checkpoint_restore(self, env: BalatroEnvironment) -> None:
-        game_obs, game_mask, info = env.reset()
-        
-        # Save initial state
+        _, game_mask, info = env.reset()
+
         initial_state = env.get_state()
-        
-        # Check initial trackers
+        initial_bytes = pickle.dumps(initial_state, protocol=5)
         assert env.episode_length == 0
         assert env._step_count == 0
-        
-        # Take a step
+
         action = _pick_valid_action(game_mask, info)
-        game_obs2, terminated, truncated, game_mask2, info2 = env.step(action)
-        
-        # Trackers should change
+        env.step(action)
+        advanced_state = env.get_state()
+        advanced_bytes = pickle.dumps(advanced_state, protocol=5)
+
         assert env.episode_length == 1
         assert env._step_count == 1
-        
-        # Load state back
+
         env.load_state(initial_state)
-        
-        # Verify trackers and adapter restored
+        assert pickle.dumps(env.get_state(), protocol=5) == initial_bytes
         assert env.episode_length == 0
         assert env._step_count == 0
         assert env.episode_ante == 1
         assert env.episode_won is False
-        
-        # Can still step normally
-        action2 = _pick_valid_action(game_mask, info)
-        env.step(action2)
-        assert env.episode_length == 1
+
+        # Reusing the same legal action must reproduce the complete engine
+        # state and all environment-owned counters exactly.
+        env.step(action)
+        assert pickle.dumps(env.get_state(), protocol=5) == advanced_bytes
         assert env._step_count == 1
 
     def test_env_deep_copy_isolation(self, env: BalatroEnvironment) -> None:
         env.reset()
         state = env.get_state()
-        
+
         # Modifying state dict should not modify env trackers or adapter state
         state["episode_length"] = 999
         assert env.episode_length != 999
@@ -232,4 +229,3 @@ class TestEnvironmentCheckpointing:
         # Modifying adapter state within state dict should not modify env
         state["adapter_state"]["dollars"] = 999
         assert env._adapter.raw_state.get("dollars", 0) != 999
-
