@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from jackdaw.engine.data.enums import Rank, Suit
+from jackdaw.engine.fastcopy import ATOMIC_TYPES, fast_deepcopy, keep_alive
 
 # ---------------------------------------------------------------------------
 # Module-level sort_id counter (matches G.sort_id in globals.lua)
@@ -115,6 +116,14 @@ class CardBase:
     original_value: Rank  # original rank before Strength tarot changes
     times_played: int = 0
 
+    def __deepcopy__(self, memo: dict[int, Any]) -> CardBase:
+        """Copy directly: every field is an immutable scalar or an enum member."""
+        new = CardBase.__new__(CardBase)
+        memo[id(self)] = new
+        keep_alive(self, memo)
+        new.__dict__.update(self.__dict__)
+        return new
+
     @staticmethod
     def from_card_key(card_key: str, suit: str, value: str) -> CardBase:
         """Build a CardBase from P_CARDS data, matching Card:set_base."""
@@ -205,6 +214,23 @@ class Card:
     perishable: bool = False
     perish_tally: int = 5  # rounds until perish
     rental: bool = False
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> Card:
+        """Copy field-by-field instead of through ``copy``'s reflective path.
+
+        Most fields are immutable scalars and are shared; ``base``, ``ability``
+        and ``edition`` are the mutable ones and are copied. Any field added
+        later whose type is not recognised falls through to ``copy.deepcopy``
+        via :func:`~jackdaw.engine.fastcopy.fast_deepcopy`, so a new mutable field
+        cannot be silently aliased into the copy.
+        """
+        new = Card.__new__(Card)
+        memo[id(self)] = new
+        keep_alive(self, memo)
+        target = new.__dict__
+        for name, value in self.__dict__.items():
+            target[name] = value if type(value) in ATOMIC_TYPES else fast_deepcopy(value, memo)
+        return new
 
     def set_base(self, card_key: str, suit: str, value: str) -> None:
         """Populate base fields from P_CARDS data, matching Card:set_base."""

@@ -85,6 +85,9 @@ from __future__ import annotations
 
 import math
 import struct
+from typing import Any
+
+from jackdaw.engine.fastcopy import fast_deepcopy, keep_alive
 
 __all__ = [
     "PseudoRandom",
@@ -282,6 +285,19 @@ class PseudoRandom:
             "seed": seed_str,
             "hashed_seed": pseudohash(seed_str),
         }
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> PseudoRandom:
+        """Copy the stream table directly — the PRNG is copied on every checkpoint.
+
+        ``_state`` is a flat name -> float table, so this is the same copy
+        ``copy.deepcopy`` makes, without re-deriving the plan for each of its ~80
+        entries. See ``jackdaw/engine/fastcopy.py``.
+        """
+        new = PseudoRandom.__new__(PseudoRandom)
+        memo[id(self)] = new
+        keep_alive(self, memo)
+        new._state = fast_deepcopy(self._state, memo)
+        return new
 
     # -- accessors ----------------------------------------------------------
 
