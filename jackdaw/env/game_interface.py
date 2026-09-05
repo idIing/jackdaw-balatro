@@ -15,11 +15,11 @@ Architecture::
 
 from __future__ import annotations
 
-import copy
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 from jackdaw.engine.actions import Action, GamePhase
+from jackdaw.engine.fastcopy import fast_deepcopy
 
 # ---------------------------------------------------------------------------
 # GameState — lightweight frozen snapshot
@@ -183,10 +183,13 @@ class DirectAdapter:
         return engine_legal(self._gs)
 
     def get_state(self) -> dict[str, Any]:
-        return copy.deepcopy(self._gs)
+        # fast_deepcopy, not copy.deepcopy: same contract (fully independent copy,
+        # memo honoured), reached without the reflective graph walk. See
+        # jackdaw/engine/fastcopy.py -- this is the checkpoint hot path.
+        return fast_deepcopy(self._gs)
 
     def load_state(self, state: dict[str, Any]) -> None:
-        self._gs = copy.deepcopy(state)
+        self._gs = fast_deepcopy(state)
 
 
     @property
