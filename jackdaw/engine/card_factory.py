@@ -304,6 +304,9 @@ def create_card(
         Modifier-enable keys:
         ``enable_eternals_in_shop`` (bool), ``enable_perishables_in_shop``
         (bool), ``enable_rentals_in_shop`` (bool).
+        Read from ``modifiers`` (the normal run state), with top-level
+        values as a fallback for direct callers. Nested values take
+        precedence, including explicit ``False``.
 
         Edition key:
         ``edition_rate`` (float, default 1.0).
@@ -421,9 +424,16 @@ def create_card(
         # Eternal / Perishable / Rental rolls are SHOP/PACK-area-gated
         # (common_events.lua:2137-2146)...
         if area in ("shop", "pack"):
-            enable_eternals = gs.get("enable_eternals_in_shop", False)
-            enable_perishables = gs.get("enable_perishables_in_shop", False)
-            enable_rentals = gs.get("enable_rentals_in_shop", False)
+            modifiers = gs.get("modifiers", {})
+            enable_eternals = modifiers.get(
+                "enable_eternals_in_shop", gs.get("enable_eternals_in_shop", False)
+            )
+            enable_perishables = modifiers.get(
+                "enable_perishables_in_shop", gs.get("enable_perishables_in_shop", False)
+            )
+            enable_rentals = modifiers.get(
+                "enable_rentals_in_shop", gs.get("enable_rentals_in_shop", False)
+            )
 
             # -- Eternal / Perishable (shared roll) --
             ep_roll = rng.random(_EP_KEY[area] + str(ante))
