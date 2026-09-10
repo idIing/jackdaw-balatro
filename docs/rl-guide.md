@@ -241,7 +241,7 @@ uv sync --extra train   # installs sb3-contrib, stable-baselines3, torch, tensor
 
 The wrapper sits between SB3 and the factored `BalatroEnvironment`:
 
-1. **Action flattening**: Each step, it enumerates all legal `FactoredAction` instances from the `ActionMask` into a flat list. The agent picks an index into this list. Card-selecting actions (PlayHand, Discard) enumerate all legal card combinations up to a budget of 200 per action type; if the combinatorial space exceeds the budget, subsets are randomly sampled.
+1. **Action flattening**: Each step, it enumerates all legal `FactoredAction` instances from the `ActionMask` into a flat list. The agent picks an index into this list. Card-selecting actions (PlayHand, Discard) enumerate all legal card combinations up to a budget of 218 per action type, covering every one-through-five-card selection in a standard eight-card hand. If the combinatorial space exceeds that budget, subsets are randomly sampled.
 
 2. **Action masking**: The `action_masks()` method returns a `bool[500]` array — `True` for indices that map to a legal action, `False` for padding. MaskablePPO uses this to zero out logits for illegal actions.
 
