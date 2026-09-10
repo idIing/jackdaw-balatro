@@ -6,7 +6,9 @@ import numpy as np
 import pytest
 from gymnasium import spaces
 
+from jackdaw.env.action_space import ActionType
 from jackdaw.env.game_interface import DirectAdapter
+from jackdaw.env.game_spec import FactoredAction, GameActionMask
 from jackdaw.env.gymnasium_wrapper import MAX_ACTIONS, BalatroGymnasiumEnv
 
 
@@ -124,6 +126,30 @@ class TestActionMasks:
     def test_action_table_within_budget(self, env: BalatroGymnasiumEnv) -> None:
         env.reset(seed=42)
         assert len(env._action_table) <= MAX_ACTIONS
+
+    def test_standard_hand_card_actions_are_complete_and_stable(
+        self, env: BalatroGymnasiumEnv
+    ) -> None:
+        type_mask = np.zeros(21, dtype=bool)
+        type_mask[[int(ActionType.PlayHand), int(ActionType.Discard)]] = True
+        mask = GameActionMask(
+            type_mask=type_mask,
+            card_mask=np.ones(8, dtype=bool),
+            entity_masks={},
+            min_card_select=1,
+            max_card_select=5,
+        )
+
+        env._rng = np.random.default_rng(0)
+        first = env._enumerate_actions(mask, {})
+        env._rng = np.random.default_rng(1)
+        second = env._enumerate_actions(mask, {})
+
+        assert first == second
+        assert len(first) == 436
+        assert FactoredAction(
+            action_type=int(ActionType.PlayHand), card_target=(2, 3, 5, 6, 7)
+        ) in first
 
 
 # ------------------------------------------------------------------

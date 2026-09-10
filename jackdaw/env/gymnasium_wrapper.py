@@ -30,7 +30,9 @@ from jackdaw.env.game_interface import GameAdapter
 from jackdaw.env.game_spec import FactoredAction, GameActionMask, GameObservation
 
 MAX_ACTIONS: int = 500
-CARD_COMBO_BUDGET: int = 200
+# An eight-card hand has 218 distinct selections of one through five cards.
+# Keep every standard-hand target so a legal action is not randomly omitted.
+CARD_COMBO_BUDGET: int = 218
 
 # Pre-compute entity layout from spec
 _SPEC = balatro_game_spec()
