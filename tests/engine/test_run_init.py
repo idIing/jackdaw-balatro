@@ -270,3 +270,29 @@ class TestIntegrationWithInitializeRun:
         assert gs["modifiers"]["no_blind_reward"]["Small"] is True
         assert gs["banned_keys"].get("j_golden") is True
         assert len(gs["challenge_jokers"]) == 5
+
+
+class TestStartingConsumables:
+    """Magic Deck starts with two Fools, Ghost Deck with a Hex.
+
+    Deck config at game.lua:633,635; created into the consumable area by
+    ``Back:apply_to_run`` (back.lua:184-190) with a forced key, so no seeded
+    stream is drawn (create_card, common_events.lua:2088-2110).
+    """
+
+    def test_magic_deck_two_fools(self):
+        gs = initialize_run("b_magic", 1, "START_ITEMS")
+        assert [c.center_key for c in gs["consumables"]] == ["c_fool", "c_fool"]
+        assert gs["used_jokers"].get("c_fool")
+
+    def test_ghost_deck_hex(self):
+        gs = initialize_run("b_ghost", 1, "START_ITEMS")
+        assert [c.center_key for c in gs["consumables"]] == ["c_hex"]
+        assert gs["consumables"][0].sell_cost > 0
+
+    def test_no_seeded_stream_drawn(self):
+        streams = set(initialize_run("b_magic", 1, "START_ITEMS")["rng"].state)
+        assert streams == set(initialize_run("b_red", 1, "START_ITEMS")["rng"].state)
+
+    def test_other_decks_start_empty(self):
+        assert initialize_run("b_red", 1, "START_ITEMS")["consumables"] == []

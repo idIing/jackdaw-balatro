@@ -270,7 +270,7 @@ def initialize_run(
     if back_config.get("randomize_rank_suit"):
         sp["erratic_suits_and_ranks"] = True
 
-    # Starting consumables (Magic Deck, Ghost Deck) — stored for caller to add
+    # Starting consumables (Magic Deck, Ghost Deck) — created in step 11b
     starting_consumables: list[str] = mutations.get("starting_consumables", [])
     gs["starting_consumables"] = starting_consumables
 
@@ -355,6 +355,28 @@ def initialize_run(
     gs.setdefault("consumables", [])
     gs.setdefault("hand", [])
     gs.setdefault("discard_pile", [])
+
+    # -----------------------------------------------------------------------
+    # 11b. Starting consumables — the deck's (Magic Deck's two Fools, Ghost
+    # Deck's Hex; game.lua:633,635, created at back.lua:184-190), then the
+    # challenge's (game.lua:2079-2087).  A forced key draws no seeded RNG
+    # (create_card, common_events.lua:2088-2110), and set_ability marks the
+    # key used (card.lua:349-355).
+    # -----------------------------------------------------------------------
+    from jackdaw.engine.card_factory import create_card
+
+    for c_key in gs["starting_consumables"]:
+        card = create_card(
+            "Tarot",
+            rng,
+            rr["ante"],
+            area="consumables",
+            soulable=False,
+            forced_key=c_key,
+            game_state=gs,
+        )
+        card.add_to_deck(gs)
+        gs["consumables"].append(card)
 
     # -----------------------------------------------------------------------
     # Phase — the run starts at blind selection for Small blind
