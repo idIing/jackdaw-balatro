@@ -177,8 +177,14 @@ def apply_illusion_shop_edition(rng: PseudoRandom, card: Any) -> None:
 
 _BOOSTER_POOL: list[str] = CENTER_POOLS.get("Booster", [])
 
-# First-shop Buffoon guarantee: Lua uses math.random(1, 2) which is
-# non-deterministic; we deterministically return _1 as the fallback.
+# First-shop Buffoon guarantee: Lua draws the variant with the global
+# math.random(1, 2) (common_events.lua:1944-1947).  That generator is reseeded
+# by every pseudorandom() call (misc_functions.lua:315-319) but also drawn by
+# visual code (Card:init, card.lua:47-49; sounds, juice, particles), which
+# Jackdaw does not model -- its TW223 emulation is stateless per call.  No
+# fixed draw count after the last reseed (0..12) reproduced the variant in 4
+# recorded live runs (all _2; alpha-balatro replay sweep, 2026-09-26), so
+# this returns _1.  The two packs differ only in art (game.lua:693-694).
 _FIRST_SHOP_BUFFOON_PACK = "p_buffoon_normal_1"
 _FIRST_SHOP_BUFFOON_KEY = "first_shop_buffoon"
 
@@ -205,8 +211,8 @@ def get_pack(
     When *first_shop* is ``True`` and ``'p_buffoon_normal_1'`` is not in
     *banned_keys*, the function returns ``'p_buffoon_normal_1'`` immediately
     without consuming an RNG draw.  The Lua source picks variant 1 or 2 via
-    the non-deterministic ``math.random(1, 2)``; we always return variant 1
-    as the deterministic equivalent.
+    the global ``math.random(1, 2)``, whose state Jackdaw does not model (see
+    ``_FIRST_SHOP_BUFFOON_PACK``); we always return variant 1.
 
     The caller is responsible for tracking when the guarantee has been
     consumed (see :func:`populate_shop`).
