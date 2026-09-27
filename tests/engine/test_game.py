@@ -480,6 +480,34 @@ class TestNextRound:
 
 
 # ---------------------------------------------------------------------------
+# Green Deck payout
+# ---------------------------------------------------------------------------
+
+
+class TestGreenDeckPayout:
+    """Green Deck: $2 per unused hand, $1 per unused discard, no interest.
+
+    ``Back:apply_to_run`` writes these into ``G.GAME.modifiers``
+    (back.lua:269-276; config at game.lua:631) and the round payout reads
+    them there (state_events.lua:1165-1173).  Live paid +$5 for 2 hands
+    and 1 discard left where Jackdaw paid +$2 (alpha-balatro replay sweep,
+    2026-09-26, bundle be055ad3).
+    """
+
+    def test_cash_out_pays_the_deck_bonus(self):
+        gs = initialize_run("b_green", 1, "GREEN_PAYOUT")
+        step(gs, SelectBlind())
+        gs["dollars"] = 20  # interest would pay $4 on any other deck
+        gs["blind"].chips = 1
+        step(gs, PlayHand(card_indices=(0,)))
+        assert gs["phase"] == GamePhase.ROUND_EVAL
+        cr = gs["current_round"]
+        expected = gs["blind"].dollars + 2 * cr["hands_left"] + 1 * cr["discards_left"]
+        step(gs, CashOut())
+        assert gs["dollars"] == 20 + expected
+
+
+# ---------------------------------------------------------------------------
 # SortHand
 # ---------------------------------------------------------------------------
 

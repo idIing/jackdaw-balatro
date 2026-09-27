@@ -73,12 +73,6 @@ Lifecycle legend for the **set by** column:
                                          Set by init.
     bankrupt_at        int               Maximum debt floor (default 0).
                                          Set by init.  Stake 5+ allows negative.
-    money_per_hand     int               Dollars per hand played (Green Deck).
-                                         Set by back (if applicable).
-    money_per_discard  int               Dollars per discard used (Green Deck).
-                                         Set by back (if applicable).
-    no_interest        bool              Disable interest (Green Deck).
-                                         Set by back (if applicable).
 
 
 .. rubric:: Card areas
@@ -355,7 +349,8 @@ are set/incremented by joker ability application.
 
 .. rubric:: Modifiers — ``gs["modifiers"]``
 
-Run-wide rule flags, set by stakes and challenges.
+Run-wide rule flags, set by stakes, challenges and the deck (Green Deck sets
+``money_per_hand``, ``money_per_discard`` and ``no_interest``, back.lua:269-276).
 
 ::
 

@@ -249,12 +249,14 @@ def initialize_run(
         sp["dollars"] += mutations["dollars_delta"]
     if "ante_scaling" in mutations:
         sp["ante_scaling"] = mutations["ante_scaling"]
+    # Green Deck writes these into G.GAME.modifiers (back.lua:269-276), where
+    # the round payout reads them (state_events.lua:1165-1173, economy.py).
     if "money_per_hand" in mutations:
-        gs["money_per_hand"] = mutations["money_per_hand"]
+        gs["modifiers"]["money_per_hand"] = mutations["money_per_hand"]
     if "money_per_discard" in mutations:
-        gs["money_per_discard"] = mutations["money_per_discard"]
+        gs["modifiers"]["money_per_discard"] = mutations["money_per_discard"]
     if "no_interest" in mutations:
-        gs["no_interest"] = True
+        gs["modifiers"]["no_interest"] = True
     if "spectral_rate" in mutations:
         gs["spectral_rate"] = mutations["spectral_rate"]
     if "reroll_discount" in mutations:
