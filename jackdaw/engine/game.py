@@ -409,7 +409,7 @@ def _open_tag_pack(gs: dict[str, Any], pack_key: str, force: bool = False) -> No
                 pack_hand.append(card)
         gs["pack_hand"] = pack_hand
         combined_hand = hand + pack_hand
-        _sort_hand_desc(combined_hand)
+        _sort_hand(combined_hand, gs.get("hand_sort", "desc"))
         gs["hand"] = combined_hand
 
     gs["phase"] = GamePhase.PACK_OPENING
@@ -801,7 +801,7 @@ def _handle_play_hand(gs: dict[str, Any], indices: tuple[int, ...]) -> dict[str,
             for _ in range(min(3, len(deck))):
                 if deck:
                     hand_out.append(deck.pop())
-            _sort_hand_desc(hand_out)
+            _sort_hand(hand_out, gs.get("hand_sort", "desc"))
         else:
             _draw_hand(gs)
 
@@ -1045,7 +1045,7 @@ def _handle_discard(gs: dict[str, Any], indices: tuple[int, ...]) -> dict[str, A
         for _ in range(min(3, len(deck))):
             if deck:
                 hand_out.append(deck.pop())
-        _sort_hand_desc(hand_out)
+        _sort_hand(hand_out, gs.get("hand_sort", "desc"))
     else:
         _draw_hand(gs)
 
@@ -1559,7 +1559,7 @@ def _handle_open_booster(gs: dict[str, Any], idx: int) -> dict[str, Any]:
         gs["pack_hand"] = pack_hand
         # These cards serve as targets for Tarot/Spectral use
         combined_hand = hand + pack_hand
-        _sort_hand_desc(combined_hand)
+        _sort_hand(combined_hand, gs.get("hand_sort", "desc"))
         gs["hand"] = combined_hand
 
     # Fire open_booster joker context (Hallucination creates Tarot).
@@ -1778,24 +1778,16 @@ def _handle_next_round(gs: dict[str, Any]) -> dict[str, Any]:
 
 
 def _handle_sort_hand(gs: dict[str, Any], mode: str) -> dict[str, Any]:
-    """Sort the hand by rank or suit."""
+    """Sort the hand by rank or suit, descending, and keep that mode.
+
+    Live's buttons call ``G.hand:sort('desc')`` / ``G.hand:sort('suit desc')``
+    (button_callbacks.lua:36-47); ``CardArea:sort`` stores the method in
+    ``config.sort`` so every later draw re-sorts the same way (cardarea.lua:577-590).
+    """
     _require_phase(gs, GamePhase.SELECTING_HAND)
 
-    hand: list = gs.get("hand", [])
-    if mode == "rank":
-        hand.sort(
-            key=lambda c: (
-                getattr(c.base, "id", 0) if c.base else 0,
-                getattr(c.base, "suit_nominal", 0) if c.base else 0,
-            )
-        )
-    elif mode == "suit":
-        hand.sort(
-            key=lambda c: (
-                getattr(c.base, "suit_nominal", 0) if c.base else 0,
-                getattr(c.base, "id", 0) if c.base else 0,
-            )
-        )
+    gs["hand_sort"] = "suit desc" if mode == "suit" else "desc"
+    _sort_hand(gs.get("hand", []), gs["hand_sort"])
     return gs
 
 
@@ -1837,18 +1829,24 @@ def _handle_swap_jokers(gs: dict[str, Any], idx: int, direction: int) -> dict[st
 # ---------------------------------------------------------------------------
 
 
-def _sort_hand_desc(hand: list) -> None:
-    """Sort hand in place, descending by nominal value.
+def _sort_hand(hand: list, mode: str = "desc") -> None:
+    """Sort hand in place, descending, by the hand's sort mode.
 
-    Matches Lua ``CardArea:sort()`` with default config ``sort='desc'``
-    (cardarea.lua:577-580).  Uses ``Card.get_nominal()`` as the sort key,
-    which combines rank, suit tiebreaker, face nominal, and a unique
-    micro-value so every card gets a distinct position.
+    Matches Lua ``CardArea:sort()`` (cardarea.lua:577-590): ``'desc'`` keys on
+    ``Card.get_nominal()``, ``'suit desc'`` on ``Card.get_nominal('suit')``.
+    Both combine rank, suit tiebreaker, face nominal, and a unique
+    micro-value so every card gets a distinct position.  The mode is the
+    last one the player chose (``gs["hand_sort"]``), ``'desc'`` by default
+    (game.lua:1926).
 
     Only sorts cards that have a ``get_nominal`` method (playing cards);
     non-playing-card entries are left at the end.
     """
-    hand.sort(key=lambda c: c.get_nominal() if hasattr(c, "get_nominal") else -1e9, reverse=True)
+    nominal_mod = "suit" if mode == "suit desc" else None
+    hand.sort(
+        key=lambda c: c.get_nominal(nominal_mod) if hasattr(c, "get_nominal") else -1e9,
+        reverse=True,
+    )
 
 
 def _draw_hand(gs: dict[str, Any]) -> None:
@@ -1896,8 +1894,8 @@ def _draw_hand(gs: dict[str, Any]) -> None:
             ):
                 card.facing = "back"
             hand.append(card)
-    # Sort hand descending by nominal (matches Lua CardArea:sort 'desc')
-    _sort_hand_desc(hand)
+    # Re-sort by the hand's sort mode (draw_card(..., sort=true), state_events.lua:372)
+    _sort_hand(hand, gs.get("hand_sort", "desc"))
 
 
 def _joker_end_of_round_effects(gs: dict[str, Any]) -> dict[str, Any]:
@@ -2345,7 +2343,7 @@ def _apply_setting_blind_mutations(
                     )
                     if ckey == "cert" and gs.get("phase") == GamePhase.SELECTING_HAND:
                         gs.setdefault("hand", []).append(c)
-                        _sort_hand_desc(gs.get("hand", []))
+                        _sort_hand(gs.get("hand", []), gs.get("hand_sort", "desc"))
                     elif ckey == "marble":
                         # Marble's stone is emplaced by a queued event that
                         # runs AFTER new_round's 'nr' shuffle — it must not
@@ -2617,7 +2615,7 @@ def _apply_consumable_result(
                 new_card.sort_id = _next_sort_id()
                 if gs.get("phase") == GamePhase.SELECTING_HAND:
                     gs.setdefault("hand", []).append(new_card)
-                    _sort_hand_desc(gs.get("hand", []))
+                    _sort_hand(gs.get("hand", []), gs.get("hand_sort", "desc"))
                 else:
                     deck_list.append(new_card)
                 continue
@@ -2737,7 +2735,7 @@ def _resolve_create_descriptors(gs: dict[str, Any], descriptors: list[dict[str, 
 
     # Re-sort hand if any cards were added during SELECTING_HAND
     if gs.get("phase") == GamePhase.SELECTING_HAND:
-        _sort_hand_desc(gs.get("hand", []))
+        _sort_hand(gs.get("hand", []), gs.get("hand_sort", "desc"))
 
 
 # ---------------------------------------------------------------------------

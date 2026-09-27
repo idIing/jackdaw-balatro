@@ -482,12 +482,48 @@ class TestNextRound:
 
 
 class TestSortHand:
-    def test_hand_reordered(self):
+    """Live sorts descending and keeps the mode for later draws.
+
+    ``G.FUNCS.sort_hand_value`` / ``sort_hand_suit`` call ``G.hand:sort('desc')`` /
+    ``G.hand:sort('suit desc')`` (button_callbacks.lua:36-47); ``CardArea:sort``
+    stores the method in ``config.sort`` and orders by ``get_nominal`` descending
+    (cardarea.lua:577-590); a draw re-sorts with the stored method
+    (state_events.lua:372, ``to:sort()``).
+    """
+
+    def test_rank_sort_is_descending(self):
         gs = _init_gs()
         step(gs, SelectBlind())
+        step(gs, SortHand(mode="suit"))
         step(gs, SortHand(mode="rank"))
-        ids = [c.base.id for c in gs["hand"] if c.base]
-        assert ids == sorted(ids)
+        keys = [c.get_nominal() for c in gs["hand"]]
+        assert keys == sorted(keys, reverse=True)
+        assert gs["hand"][0].base.id >= gs["hand"][-1].base.id
+
+    def test_suit_sort_is_descending(self):
+        gs = _init_gs()
+        step(gs, SelectBlind())
+        step(gs, SortHand(mode="suit"))
+        keys = [c.get_nominal("suit") for c in gs["hand"]]
+        assert keys == sorted(keys, reverse=True)
+        # Spades (suit_nominal 0.04) lead, Diamonds (0.01) trail.
+        assert gs["hand"][0].base.suit_nominal >= gs["hand"][-1].base.suit_nominal
+
+    def test_draw_keeps_suit_sort(self):
+        gs = _init_gs()
+        step(gs, SelectBlind())
+        step(gs, SortHand(mode="suit"))
+        step(gs, Discard(card_indices=(0, 1, 2)))
+        keys = [c.get_nominal("suit") for c in gs["hand"]]
+        assert keys == sorted(keys, reverse=True)
+        by_rank = sorted(gs["hand"], key=lambda c: c.get_nominal(), reverse=True)
+        assert gs["hand"] != by_rank
+
+    def test_new_run_draws_by_rank(self):
+        gs = _init_gs()
+        step(gs, SelectBlind())
+        keys = [c.get_nominal() for c in gs["hand"]]
+        assert keys == sorted(keys, reverse=True)
 
 
 # ---------------------------------------------------------------------------
