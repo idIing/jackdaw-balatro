@@ -473,12 +473,12 @@ def _legal_pack_opening(gs: dict[str, Any]) -> list[Action]:
     actions: list[Action] = []
     pack_cards: list[Card] = gs.get("pack_cards", [])
     remaining: int = gs.get("pack_choices_remaining", 0)
-    pack_type: str = gs.get("pack_type", "")
 
-    # Spectral packs: balatrobot cannot handle Spectral card highlighting
-    # via RPC, so only SkipPack is offered.  RNG stays in sync because
-    # the pack is generated normally — we just force the agent to skip.
-    if remaining > 0 and pack_type != "Spectral":
+    # Spectral picks are legal in the game.  They were once masked here
+    # because balatrobot cannot express Spectral card highlighting over
+    # RPC -- a bot-driver limit, not a rule.  The mask never reached the
+    # live bridge anyway: ``bot_state_to_game_state`` sets no ``pack_type``.
+    if remaining > 0:
         # Vanilla gate (button_callbacks.lua:2112-2113): a Joker in a pack
         # is selectable only if joker slots have room or it is negative.
         jokers: list[Card] = gs.get("jokers", [])

@@ -851,6 +851,19 @@ class TestBoardActionsEveryPhase:
         step(gs, SwapHandLeft(idx=1))
         assert gs["hand"][1] is first
 
+    def test_spectral_pack_picks_offered(self):
+        """Masked once for a balatrobot RPC limit, not a game rule (item O)."""
+        gs = {
+            "phase": GamePhase.PACK_OPENING,
+            "pack_type": "Spectral",
+            "pack_cards": [_make_consumable("c_immolate", "Spectral")],
+            "pack_choices_remaining": 1,
+            "hand": [_action_card() for _ in range(5)],
+            "jokers": [],
+            "consumables": [],
+        }
+        picks = [a for a in get_legal_actions(gs) if isinstance(a, PickPackCard)]
+        assert picks == [PickPackCard(card_index=0)]
 
 
 # ============================================================================
