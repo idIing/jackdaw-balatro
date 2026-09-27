@@ -220,11 +220,13 @@ def get_action_mask(game_state: dict[str, Any]) -> ActionMask:
         return ActionMask(type_mask, card_mask, entity_masks, max_card_select, min_card_select)
 
     # --- BLIND_SELECT ---
-    # Selling is available wherever vanilla's sell button is live, which
-    # is everywhere except mid-scoring: Card:can_sell_card (card.lua:1640)
-    # has no state gate and the blind-select restriction is commented out
-    # in the source. Keep these call sites in step with
-    # _SELLABLE_PHASES in game.py or the mask and executor will drift.
+    # Selling, using and reordering are available wherever vanilla's
+    # buttons are live, which is every phase here: Card:can_sell_card and
+    # can_use_consumeable (card.lua:1524-1527, 1640-1645) gate only on
+    # cards in play, a locked controller and STOP_USE, and the
+    # blind-select restriction is commented out in the source.  Keep
+    # these call sites in step with _BOARD_PHASES in game.py or the mask
+    # and executor will drift.
     if phase == GamePhase.BLIND_SELECT:
         type_mask[ActionType.SelectBlind] = True
         blind_on_deck = game_state.get("blind_on_deck", "Small")
@@ -233,6 +235,8 @@ def get_action_mask(game_state: dict[str, Any]) -> ActionMask:
         _mask_sell_jokers(type_mask, entity_masks, jokers)
         _mask_sell_consumables(type_mask, entity_masks, consumables)
         _mask_consumables(type_mask, entity_masks, game_state)
+        _mask_joker_swaps(type_mask, entity_masks, jokers)
+        _mask_hand_swaps(type_mask, entity_masks, hand)
 
     # --- SELECTING_HAND ---
     elif phase == GamePhase.SELECTING_HAND:
@@ -253,6 +257,10 @@ def get_action_mask(game_state: dict[str, Any]) -> ActionMask:
     elif phase == GamePhase.ROUND_EVAL:
         type_mask[ActionType.CashOut] = True
         _mask_consumables(type_mask, entity_masks, game_state)
+        _mask_sell_jokers(type_mask, entity_masks, jokers)
+        _mask_sell_consumables(type_mask, entity_masks, consumables)
+        _mask_joker_swaps(type_mask, entity_masks, jokers)
+        _mask_hand_swaps(type_mask, entity_masks, hand)
 
     # --- SHOP ---
     elif phase == GamePhase.SHOP:
@@ -271,6 +279,7 @@ def get_action_mask(game_state: dict[str, Any]) -> ActionMask:
 
         type_mask[ActionType.NextRound] = True
         _mask_joker_swaps(type_mask, entity_masks, jokers)
+        _mask_hand_swaps(type_mask, entity_masks, hand)
 
     # --- PACK_OPENING ---
     elif phase == GamePhase.PACK_OPENING:
@@ -303,6 +312,9 @@ def get_action_mask(game_state: dict[str, Any]) -> ActionMask:
         type_mask[ActionType.SkipPack] = True
         _mask_sell_jokers(type_mask, entity_masks, jokers)
         _mask_sell_consumables(type_mask, entity_masks, consumables)
+        _mask_consumables(type_mask, entity_masks, game_state)
+        _mask_joker_swaps(type_mask, entity_masks, jokers)
+        _mask_hand_swaps(type_mask, entity_masks, hand)
 
     return ActionMask(type_mask, card_mask, entity_masks, max_card_select, min_card_select)
 

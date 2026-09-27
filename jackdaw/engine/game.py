@@ -1241,14 +1241,19 @@ def _handle_buy_card(gs: dict[str, Any], idx: int) -> dict[str, Any]:
 # States in which vanilla's sell button is live. ROUND_EVAL is excluded
 # deliberately: our engine models the cash-out as one atomic step, so
 # there is no window there for the player to act.
-_SELLABLE_PHASES = frozenset(
-    {
-        GamePhase.BLIND_SELECT,
-        GamePhase.SELECTING_HAND,
-        GamePhase.SHOP,
-        GamePhase.PACK_OPENING,
-    }
+# Every phase where the player has control.  Live gates selling, using and
+# reordering on cards in play, a locked controller and STOP_USE, never on the
+# state (card.lua:1524-1527, 1640-1645); Jackdaw has no mid-scoring phase.
+# Ruled against recorded play: sells, uses and reorders in packs, at cash-out
+# and at blind select (alpha-balatro replay sweep, PI 2026-09-26).
+_BOARD_PHASES = (
+    GamePhase.BLIND_SELECT,
+    GamePhase.SELECTING_HAND,
+    GamePhase.ROUND_EVAL,
+    GamePhase.SHOP,
+    GamePhase.PACK_OPENING,
 )
+_SELLABLE_PHASES = frozenset(_BOARD_PHASES)
 
 
 def _handle_sell_card(gs: dict[str, Any], area: str, idx: int) -> dict[str, Any]:
@@ -1393,8 +1398,8 @@ def _handle_use_consumable(
 ) -> dict[str, Any]:
     """Use a consumable from the player's consumable slots.
 
-    Consumables can be used in BLIND_SELECT, SELECTING_HAND,
-    ROUND_EVAL, and SHOP phases.  The phase does NOT change after use.
+    Consumables can be used in every non-terminal phase, including inside
+    an open pack.  The phase does NOT change after use.
 
     Sequence:
     1. Validate phase and index
@@ -1405,9 +1410,7 @@ def _handle_use_consumable(
        requests it (Constellation +xMult when Planet used)
     5. Track usage stats (last_tarot_planet)
     """
-    _require_phase(
-        gs, GamePhase.BLIND_SELECT, GamePhase.SELECTING_HAND, GamePhase.ROUND_EVAL, GamePhase.SHOP
-    )
+    _require_phase(gs, *_BOARD_PHASES)
 
     consumables: list = gs.get("consumables", [])
     if idx < 0 or idx >= len(consumables):
@@ -1797,7 +1800,7 @@ def _handle_swap_hand(gs: dict[str, Any], idx: int, direction: int) -> dict[str,
     *direction* is ``-1`` (left) or ``+1`` (right).
     Free action — no cost, doesn't consume hands or discards.
     """
-    _require_phase(gs, GamePhase.SELECTING_HAND)
+    _require_phase(gs, *_BOARD_PHASES)
 
     hand: list = gs.get("hand", [])
     other = idx + direction
@@ -1813,7 +1816,7 @@ def _handle_swap_jokers(gs: dict[str, Any], idx: int, direction: int) -> dict[st
 
     *direction* is ``-1`` (left) or ``+1`` (right).
     """
-    _require_phase(gs, GamePhase.SELECTING_HAND, GamePhase.SHOP)
+    _require_phase(gs, *_BOARD_PHASES)
 
     jokers: list = gs.get("jokers", [])
     other = idx + direction

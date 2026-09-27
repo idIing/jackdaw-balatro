@@ -7,25 +7,34 @@ advances the game state accordingly.
 Game phases
 -----------
 :class:`GamePhase` enumerates the phases where player input is needed.
-Each phase permits a specific subset of actions:
+Each phase permits its own actions plus the *board* actions — SellCard,
+UseConsumable, SwapHandLeft/Right and SwapJokersLeft/Right — which live
+allows in every phase where the player has control:
 
 +---------------------+------------------------------------------------------+
 | Phase               | Valid actions                                         |
 +=====================+======================================================+
-| BLIND_SELECT        | SelectBlind, SkipBlind                               |
+| BLIND_SELECT        | SelectBlind, SkipBlind, board actions                |
 +---------------------+------------------------------------------------------+
-| SELECTING_HAND      | PlayHand, Discard, SortHand, UseConsumable,          |
-|                     | SwapHandLeft/Right, SwapJokersLeft/Right             |
+| SELECTING_HAND      | PlayHand, Discard, SortHand, board actions           |
 +---------------------+------------------------------------------------------+
-| SHOP                | BuyCard, SellCard, UseConsumable, RedeemVoucher,     |
-|                     | OpenBooster, Reroll, SwapJokersLeft/Right, NextRound |
+| SHOP                | BuyCard, RedeemVoucher, OpenBooster, Reroll,         |
+|                     | NextRound, board actions                             |
 +---------------------+------------------------------------------------------+
-| PACK_OPENING        | PickPackCard, SkipPack                               |
+| PACK_OPENING        | PickPackCard, SkipPack, board actions                |
 +---------------------+------------------------------------------------------+
-| ROUND_EVAL          | CashOut                                              |
+| ROUND_EVAL          | CashOut, board actions                               |
 +---------------------+------------------------------------------------------+
 | GAME_OVER           | *(terminal — no valid actions)*                      |
 +---------------------+------------------------------------------------------+
+
+Selling is refused only while cards are in play, the controller is locked,
+or under ``STOP_USE`` (``Card:can_sell_card``, card.lua:1640-1645); using a
+consumable has the same blockers (card.lua:1524-1527).  Jackdaw has no
+mid-scoring phase, so none of those windows is a decision point here.  A
+joker reordered while a hand scores takes effect from the next hand, which
+is what an atomic ``PlayHand`` gives.  The legal set was ruled against
+recorded live play (alpha-balatro replay sweep, 2026-09-26).
 """
 
 from __future__ import annotations
@@ -362,8 +371,10 @@ def _legal_blind_select(gs: dict[str, Any]) -> list[Action]:
     if blind_on_deck in ("Small", "Big"):
         actions.append(SkipBlind())
 
-    # Consumables usable during blind select
     actions.extend(_usable_consumables(gs))
+    actions.extend(_sell_actions(gs))
+    actions.extend(_swap_actions(gs, "jokers"))
+    actions.extend(_swap_actions(gs, "hand"))
     return actions
 
 
@@ -384,28 +395,21 @@ def _legal_selecting_hand(gs: dict[str, Any]) -> list[Action]:
     if len(hand) > 1:
         actions.append(SortHand(mode="rank"))
         actions.append(SortHand(mode="suit"))
-        for i in range(1, len(hand)):
-            actions.append(SwapHandLeft(idx=i))
-        for i in range(len(hand) - 1):
-            actions.append(SwapHandRight(idx=i))
+    actions.extend(_swap_actions(gs, "hand"))
 
     # Consumables usable during hand selection
     actions.extend(_usable_consumables(gs))
-
-    # Swap jokers
-    jokers: list[Card] = gs.get("jokers", [])
-    if len(jokers) > 1:
-        for i in range(1, len(jokers)):
-            actions.append(SwapJokersLeft(idx=i))
-        for i in range(len(jokers) - 1):
-            actions.append(SwapJokersRight(idx=i))
-
+    actions.extend(_swap_actions(gs, "jokers"))
+    actions.extend(_sell_actions(gs))
     return actions
 
 
 def _legal_round_eval(gs: dict[str, Any]) -> list[Action]:
     actions: list[Action] = [CashOut()]
     actions.extend(_usable_consumables(gs))
+    actions.extend(_sell_actions(gs))
+    actions.extend(_swap_actions(gs, "jokers"))
+    actions.extend(_swap_actions(gs, "hand"))
     return actions
 
 
@@ -433,14 +437,7 @@ def _legal_shop(gs: dict[str, Any]) -> list[Action]:
                 continue  # No room — agent must use/sell a consumable first
         actions.append(BuyCard(shop_index=i))
 
-    # Sell jokers (non-eternal)
-    for i, joker in enumerate(jokers):
-        if not joker.eternal:
-            actions.append(SellCard(area="jokers", card_index=i))
-
-    # Sell consumables
-    for i in range(len(consumables)):
-        actions.append(SellCard(area="consumables", card_index=i))
+    actions.extend(_sell_actions(gs))
 
     # Use owned consumables
     actions.extend(_usable_consumables(gs))
@@ -467,13 +464,8 @@ def _legal_shop(gs: dict[str, Any]) -> list[Action]:
     # Next round (always available in shop)
     actions.append(NextRound())
 
-    # Swap jokers
-    if len(jokers) > 1:
-        for i in range(1, len(jokers)):
-            actions.append(SwapJokersLeft(idx=i))
-        for i in range(len(jokers) - 1):
-            actions.append(SwapJokersRight(idx=i))
-
+    actions.extend(_swap_actions(gs, "jokers"))
+    actions.extend(_swap_actions(gs, "hand"))
     return actions
 
 
@@ -503,7 +495,41 @@ def _legal_pack_opening(gs: dict[str, Any]) -> list[Action]:
             actions.append(PickPackCard(card_index=i))
 
     actions.append(SkipPack())
+    actions.extend(_usable_consumables(gs))
+    actions.extend(_sell_actions(gs))
+    actions.extend(_swap_actions(gs, "jokers"))
+    actions.extend(_swap_actions(gs, "hand"))
     return actions
+
+
+# ---------------------------------------------------------------------------
+# Board actions (every non-terminal phase)
+# ---------------------------------------------------------------------------
+
+
+def _sell_actions(gs: dict[str, Any]) -> list[Action]:
+    """SellCard for each non-eternal joker and each consumable (card.lua:1640-1652)."""
+    if gs.get("STOP_USE", 0) > 0:
+        return []
+    actions: list[Action] = []
+    for i, joker in enumerate(gs.get("jokers", [])):
+        if not joker.eternal:
+            actions.append(SellCard(area="jokers", card_index=i))
+    for i in range(len(gs.get("consumables", []))):
+        actions.append(SellCard(area="consumables", card_index=i))
+    return actions
+
+
+def _swap_actions(gs: dict[str, Any], area: str) -> list[Action]:
+    """Adjacent swaps within the hand or the joker row."""
+    n = len(gs.get(area, []))
+    if n < 2:
+        return []
+    left, right = (SwapHandLeft, SwapHandRight) if area == "hand" else (
+        SwapJokersLeft,
+        SwapJokersRight,
+    )
+    return [left(idx=i) for i in range(1, n)] + [right(idx=i) for i in range(n - 1)]
 
 
 # ---------------------------------------------------------------------------

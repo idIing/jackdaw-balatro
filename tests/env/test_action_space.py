@@ -1146,7 +1146,10 @@ class TestMaskConsistencyWithEngine:
             (GamePhase.SELECTING_HAND, True),
             (GamePhase.BLIND_SELECT, True),
             (GamePhase.SHOP, True),
-            (GamePhase.ROUND_EVAL, False),
+            # Live sold a Mars on the cash-out screen (G.STATE 8); the PI
+            # ruled it allowed (alpha-balatro replay sweep, 2026-09-26).
+            (GamePhase.ROUND_EVAL, True),
+            (GamePhase.PACK_OPENING, True),
         ):
             gs = _blind_select_state(phase=phase, jokers=real_jokers(2), hand=_make_hand(5))
             mask = get_action_mask(gs)

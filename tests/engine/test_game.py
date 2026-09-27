@@ -25,7 +25,10 @@ from jackdaw.engine.actions import (
     SkipBlind,
     SkipPack,
     SortHand,
+    SwapHandLeft,
+    SwapHandRight,
     SwapJokersLeft,
+    SwapJokersRight,
     UseConsumable,
     get_legal_actions,
 )
@@ -760,6 +763,94 @@ class TestLegalGameOver:
     def test_empty(self):
         gs = {"phase": GamePhase.GAME_OVER}
         assert get_legal_actions(gs) == []
+
+
+class TestBoardActionsEveryPhase:
+    """Sell, use and reorder are legal wherever the player has control.
+
+    Live gates selling on cards in play, a locked controller and STOP_USE
+    (``Card:can_sell_card``, card.lua:1640-1645) and using on the same
+    (card.lua:1524-1527) -- never on the state.  Ruled against recorded
+    play (alpha-balatro replay sweep, PI 2026-09-26): uses, sells and
+    reorders in packs, at cash-out and at blind select; sells while
+    selecting cards.
+    """
+
+    @staticmethod
+    def _board(gs: dict[str, Any]) -> None:
+        jokers = []
+        for key in ("j_joker", "j_greedy_joker"):
+            j = Card()
+            j.set_ability(key)
+            j.center_key = key
+            j.sell_cost = 2
+            jokers.append(j)
+        planet = Card()
+        planet.set_ability("c_mercury")
+        planet.center_key = "c_mercury"
+        planet.sell_cost = 1
+        gs["jokers"] = jokers
+        gs["consumables"] = [planet]
+
+    def _phases(self):
+        gs = _init_gs("BOARD_PHASES")
+        self._board(gs)
+        yield gs
+        step(gs, SelectBlind())
+        yield gs
+        gs["blind"].chips = 1
+        step(gs, PlayHand(card_indices=(0, 1, 2, 3, 4)))
+        yield gs
+        step(gs, CashOut())
+        yield gs
+        gs["dollars"] = 100
+        step(gs, OpenBooster(card_index=0))
+        yield gs
+
+    def test_offered_and_accepted_in_every_phase(self):
+        import copy
+
+        seen = []
+        for gs in self._phases():
+            phase = gs["phase"]
+            seen.append(phase)
+            legal = get_legal_actions(gs)
+            sells = [a for a in legal if isinstance(a, SellCard)]
+            assert {a.area for a in sells} == {"jokers", "consumables"}, phase
+            assert any(isinstance(a, SwapJokersLeft) for a in legal), phase
+            assert any(isinstance(a, UseConsumable) for a in legal), phase
+            board = sells + [
+                a
+                for a in legal
+                if isinstance(
+                    a,
+                    (SwapJokersLeft, SwapJokersRight, SwapHandLeft, SwapHandRight, UseConsumable),
+                )
+            ]
+            for a in board:
+                step(copy.deepcopy(gs), a)  # must not raise
+        assert seen == [
+            GamePhase.BLIND_SELECT,
+            GamePhase.SELECTING_HAND,
+            GamePhase.ROUND_EVAL,
+            GamePhase.SHOP,
+            GamePhase.PACK_OPENING,
+        ]
+
+    def test_hand_reorder_inside_a_pack(self):
+        gs = {
+            "phase": GamePhase.PACK_OPENING,
+            "pack_cards": [_action_card()],
+            "pack_choices_remaining": 1,
+            "hand": [_action_card("H_2"), _action_card("S_A")],
+            "jokers": [],
+            "consumables": [],
+        }
+        assert SwapHandLeft(idx=1) in get_legal_actions(gs)
+        first = gs["hand"][0]
+        step(gs, SwapHandLeft(idx=1))
+        assert gs["hand"][1] is first
+
 
 
 # ============================================================================
