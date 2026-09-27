@@ -243,8 +243,8 @@ def pack_pick_block_reason(
     # hand-size spectrals (c_familiar/c_grim/c_immolate...) be offered
     # on an empty hand, and let targeting picks be offered when the
     # dealt hand could not satisfy min_highlighted.
-    selection = targets if targets is not None else pack_pick_default_targets(card, gs)
-    if selection is None and targets is None and _pick_needs_targets(card):
+    selection = targets if targets is not None else default_use_targets(card, gs)
+    if selection is None and targets is None and _needs_targets(card):
         return f"{key}: no legal target in the dealt hand"
 
     hand = gs.get("hand", [])
@@ -279,8 +279,8 @@ def pack_pick_block_reason(
 _SPECIAL_SELECTION_MIN = {"c_aura": 1}
 
 
-def _pick_selection_size(card: Any) -> int | None:
-    """How many hand cards this pack pick is used against, else ``None``."""
+def _selection_size(card: Any) -> int | None:
+    """How many hand cards this consumable is used against, else ``None``."""
     key = getattr(card, "center_key", "") or ""
     if key in _SPECIAL_SELECTION_MIN:
         return _SPECIAL_SELECTION_MIN[key]
@@ -293,25 +293,31 @@ def _pick_selection_size(card: Any) -> int | None:
     return None
 
 
-def _pick_needs_targets(card: Any) -> bool:
-    """True if this pack card is used against a highlighted selection."""
-    return _pick_selection_size(card) is not None
+def _needs_targets(card: Any) -> bool:
+    """True if this consumable is used against a highlighted selection."""
+    return _selection_size(card) is not None
 
 
-def pack_pick_default_targets(card: Any, gs: dict[str, Any]) -> tuple[int, ...] | None:
-    """The hand selection a bare (targetless) pack pick will be used with.
+def default_use_targets(card: Any, gs: dict[str, Any]) -> tuple[int, ...] | None:
+    """The hand selection a bare (targetless) use of *card* is made with.
 
-    ``None`` for picks that take no selection, and for targeting picks
+    Serves pack picks and owned consumables alike: the only difference
+    between the two in ``Card:can_use_consumeable`` is the
+    ``self.area == G.consumeables`` escape, which ``can_use_consumable``
+    already applies (``card in consumables``) and which no targeting
+    card consults.
+
+    ``None`` for cards that take no selection, and for targeting cards
     with no legal selection at all.  The action mask and the executor
     both route through this, so the selection the mask judged legal is
-    the selection the pick is made with — they cannot disagree.
+    the selection the card is used with — they cannot disagree.
 
     Prefers the lowest indices (the historical "first ``min_h`` cards"
     default) and only searches further when that selection is invalid —
     ``c_aura`` on an already-editioned first card being the case that
     forced the search.
     """
-    min_h = _pick_selection_size(card)
+    min_h = _selection_size(card)
     if min_h is None:
         return None
     hand = gs.get("hand", [])
@@ -339,6 +345,30 @@ def pack_pick_default_targets(card: Any, gs: dict[str, Any]) -> tuple[int, ...] 
         if sel != default and _ok(sel):
             return sel
     return None
+
+
+def owned_consumable_usable(card: Any, gs: dict[str, Any]) -> bool:
+    """Whether an owned consumable (in the tray) may be used now.
+
+    Judged on the selection a bare use would be made with
+    (:func:`default_use_targets`), so ``get_legal_actions`` and the
+    action mask offer a targeting card exactly when a legal selection
+    exists, and agents that emit no targets get that selection.  A
+    targeting card needs a dealt hand; the engine deals one only in
+    SELECTING_HAND and Arcana/Spectral packs, which stands in for
+    vanilla's state gate (``card.lua:1564``).
+    """
+    if _needs_targets(card):
+        return default_use_targets(card, gs) is not None
+    return can_use_consumable(
+        card,
+        hand_cards=gs.get("hand", []),
+        jokers=gs.get("jokers", []),
+        consumables=gs.get("consumables", []),
+        consumable_limit=gs.get("consumable_slots", 2),
+        joker_limit=gs.get("joker_slots", 5),
+        game_state=gs,
+    )
 
 
 # Consumables that need an eligible joker (editionless)

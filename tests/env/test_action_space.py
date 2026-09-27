@@ -1221,7 +1221,7 @@ class TestMaskConsistencyWithEngine:
         dealt card already has an edition the historical "first min_h
         cards" default was illegal, so a mask-legal pick raised.
         """
-        from jackdaw.engine.consumables import pack_pick_default_targets
+        from jackdaw.engine.consumables import default_use_targets
 
         hand = _make_hand(4)
         hand[0].edition = {"type": "foil", "foil": True}
@@ -1233,7 +1233,7 @@ class TestMaskConsistencyWithEngine:
         mask = get_action_mask(gs)
         assert mask.entity_masks[ActionType.PickPackCard][0]
         # not card 0 — it already has an edition
-        assert pack_pick_default_targets(gs["pack_cards"][0], gs) == (1,)
+        assert default_use_targets(gs["pack_cards"][0], gs) == (1,)
 
     def test_pack_pick_fool_needs_room_and_something_to_copy(self):
         """The Fool's own clause (card.lua:1554), both halves.
@@ -1337,6 +1337,139 @@ class TestMaskConsistencyWithEngine:
         assert mask.type_mask[ActionType.OpenBooster] == has_booster
         assert mask.type_mask[ActionType.Reroll] == has_reroll
         assert mask.type_mask[ActionType.NextRound] == has_next
+
+
+class TestOwnedTargetedConsumables:
+    """An owned consumable that needs a hand selection is usable.
+
+    Vanilla's use button accepts a highlighted-card consumable when
+    ``min_highlighted <= #G.hand.highlighted <= mod_num``, in
+    SELECTING_HAND and in the tarot/spectral/planet pack states
+    (``Balatro/card.lua:1564-1568``); Aura wants exactly one editionless
+    card (``card.lua:1543-1545``).  The tray gates used to judge every
+    card against an EMPTY selection, so none of these was ever offered —
+    by ``get_legal_actions`` or by the mask (alpha-balatro replay sweep
+    attempt 8: Moon, Hierophant, Death and Chariot stops).
+
+    Same convention as pack picks: the marker is offered when a legal
+    selection exists, and an agent that emits no card targets gets the
+    lowest-index legal selection.
+
+    Selection counts, from the centers (``Balatro/game.lua``):
+    Chariot 1 (540), Hierophant up to 2 (538), Death exactly 2 (546),
+    Moon up to 3 (551), Cryptid 1 (586), Aura 1 editionless (special).
+    """
+
+    KEYS = ("c_chariot", "c_heirophant", "c_death", "c_moon", "c_cryptid", "c_aura")
+
+    @staticmethod
+    def _selecting(seed: str, key: str) -> dict[str, Any]:
+        from jackdaw.engine.actions import SelectBlind
+        from jackdaw.engine.card_factory import create_consumable
+        from jackdaw.engine.game import step as engine_step
+        from jackdaw.engine.run_init import initialize_run
+
+        gs = initialize_run("b_red", 1, seed)
+        engine_step(gs, SelectBlind())
+        gs["consumables"] = [create_consumable(key)]
+        return gs
+
+    @staticmethod
+    def _in_arcana_pack(seed: str, key: str) -> dict[str, Any]:
+        from jackdaw.engine.card_factory import create_consumable
+        from jackdaw.engine.game import _open_tag_pack
+        from jackdaw.engine.run_init import initialize_run
+
+        gs = initialize_run("b_red", 1, seed)
+        gs["phase"] = GamePhase.BLIND_SELECT
+        gs["blind_on_deck"] = "Small"
+        _open_tag_pack(gs, "p_arcana_normal_1")
+        gs["consumables"] = [create_consumable(key)]
+        return gs
+
+    @staticmethod
+    def _offered(gs: dict[str, Any]) -> tuple[bool, bool]:
+        mask = get_action_mask(gs)
+        by_mask = bool(
+            mask.type_mask[ActionType.UseConsumable]
+            and mask.entity_masks[ActionType.UseConsumable][0]
+        )
+        by_legal = EngineUseConsumable(card_index=0) in get_legal_actions(gs)
+        return by_mask, by_legal
+
+    def _assert_offered_and_accepted(self, gs: dict[str, Any], key: str) -> None:
+        from jackdaw.engine.game import step as engine_step
+
+        assert self._offered(gs) == (True, True), key
+        action = factored_to_engine_action(
+            FactoredAction(action_type=int(ActionType.UseConsumable), entity_target=0), gs
+        )
+        assert action.target_indices, key  # a default selection was filled in
+        after = engine_step(copy.deepcopy(gs), action)
+        assert after["consumables"] == [], key
+
+    def test_offered_and_accepted_while_selecting(self):
+        for key in self.KEYS:
+            gs = self._selecting("TARGETED_SEL", key)
+            assert len(gs["hand"]) == 8
+            self._assert_offered_and_accepted(gs, key)
+
+    def test_offered_and_accepted_inside_a_dealt_pack(self):
+        for key in self.KEYS:
+            gs = self._in_arcana_pack("TARGETED_PACK", key)
+            assert gs["phase"] == GamePhase.PACK_OPENING and gs["hand"], key
+            self._assert_offered_and_accepted(gs, key)
+
+    def test_not_offered_without_a_legal_selection(self):
+        # Too few cards: Death needs exactly two.
+        gs = self._selecting("TARGETED_FEW", "c_death")
+        gs["hand"] = gs["hand"][:1]
+        assert self._offered(gs) == (False, False)
+        # Aura with every card already editioned.
+        gs = self._selecting("TARGETED_AURA", "c_aura")
+        for card in gs["hand"]:
+            card.set_edition({"foil": True})
+        assert self._offered(gs) == (False, False)
+        # No dealt hand at all (shop, blind select, cash-out).
+        for key in self.KEYS:
+            gs = self._selecting("TARGETED_NONE", key)
+            gs["hand"] = []
+            assert self._offered(gs) == (False, False), key
+
+    def test_default_selection_skips_an_illegal_lowest_index(self):
+        """Aura on an editioned first card: the default moves on, as for packs."""
+        gs = self._selecting("TARGETED_AURA_SKIP", "c_aura")
+        gs["hand"][0].set_edition({"foil": True})
+        action = factored_to_engine_action(
+            FactoredAction(action_type=int(ActionType.UseConsumable), entity_target=0), gs
+        )
+        assert action.target_indices == (1,)
+
+    def test_explicit_targets_pass_through(self):
+        gs = self._selecting("TARGETED_EXPLICIT", "c_moon")
+        action = factored_to_engine_action(
+            FactoredAction(
+                action_type=int(ActionType.UseConsumable), entity_target=0, card_target=(2, 5)
+            ),
+            gs,
+        )
+        assert action.target_indices == (2, 5)
+
+    def test_owned_fool_is_offered_from_a_full_tray(self):
+        """The Fool reads ``last_tarot_planet``; the tray gates never passed it.
+
+        From the tray, the ``self.area == G.consumeables`` escape waives
+        the room check (``card.lua:1553-1555``), so a full tray still
+        allows it — but only with something to copy.
+        """
+        from jackdaw.engine.card_factory import create_consumable
+
+        for ltp, usable in (("c_mercury", True), (None, False), ("c_fool", False)):
+            gs = self._selecting("TARGETED_FOOL", "c_fool")
+            gs["consumables"].append(create_consumable("c_mercury"))
+            gs["consumable_slots"] = 2
+            gs["last_tarot_planet"] = ltp
+            assert self._offered(gs) == (usable, usable), ltp
 
 
 # =========================================================================

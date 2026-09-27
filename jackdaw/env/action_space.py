@@ -105,7 +105,7 @@ from jackdaw.engine.actions import (
 )
 from jackdaw.engine.consumables import (
     _resolve_consumable_config,
-    can_use_consumable,
+    owned_consumable_usable,
     pack_pick_block_reason,
 )
 from jackdaw.env.game_spec import FactoredAction  # noqa: F401 — re-export
@@ -393,26 +393,11 @@ def _mask_consumables(
     entity_masks: dict[int, np.ndarray],
     gs: dict[str, Any],
 ) -> None:
-    """Set UseConsumable mask based on can_use_consumable checks."""
+    """Set the UseConsumable mask — the same predicate as ``get_legal_actions``."""
     consumables = gs.get("consumables", [])
     if not consumables:
         return
-    hand = gs.get("hand", [])
-    jokers = gs.get("jokers", [])
-    joker_limit = gs.get("joker_slots", 5)
-    consumable_limit = gs.get("consumable_slots", 2)
-
-    mask = np.zeros(len(consumables), dtype=bool)
-    for i, card in enumerate(consumables):
-        if can_use_consumable(
-            card,
-            hand_cards=hand,
-            jokers=jokers,
-            consumables=consumables,
-            consumable_limit=consumable_limit,
-            joker_limit=joker_limit,
-        ):
-            mask[i] = True
+    mask = np.array([owned_consumable_usable(card, gs) for card in consumables], dtype=bool)
 
     if mask.any():
         type_mask[ActionType.UseConsumable] = True
@@ -547,9 +532,19 @@ def _default_pick_targets(game_state: dict[str, Any], pack_index: int) -> tuple[
     ability = getattr(card, "ability", None) or {}
     if ability.get("set") not in ("Tarot", "Spectral"):
         return None
-    from jackdaw.engine.consumables import pack_pick_default_targets
+    from jackdaw.engine.consumables import default_use_targets
 
-    return pack_pick_default_targets(card, game_state)
+    return default_use_targets(card, game_state)
+
+
+def _default_use_targets(game_state: dict[str, Any], index: int) -> tuple[int, ...] | None:
+    """Default hand targets for an owned targeting consumable, else ``None``."""
+    consumables = game_state.get("consumables", [])
+    if index >= len(consumables):
+        return None
+    from jackdaw.engine.consumables import default_use_targets
+
+    return default_use_targets(consumables[index], game_state)
 
 
 def factored_to_engine_action(
@@ -624,6 +619,10 @@ def factored_to_engine_action(
         if fa.entity_target is None:
             raise ValueError("UseConsumable requires entity_target")
         target_indices = fa.card_target if fa.card_target else None
+        if target_indices is None:
+            # Same convention as PickPackCard: a targeting card used
+            # without targets gets the selection the mask judged legal.
+            target_indices = _default_use_targets(game_state, fa.entity_target)
         return EngineUseConsumable(
             card_index=fa.entity_target,
             target_indices=target_indices,

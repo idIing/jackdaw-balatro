@@ -543,22 +543,12 @@ def _usable_consumables(gs: dict[str, Any]) -> list[Action]:
     if not consumables:
         return []
 
-    from jackdaw.engine.consumables import can_use_consumable
+    from jackdaw.engine.consumables import owned_consumable_usable
 
-    actions: list[Action] = []
-    hand: list[Card] = gs.get("hand", [])
-    jokers: list[Card] = gs.get("jokers", [])
-    joker_limit: int = gs.get("joker_slots", 5)
-    consumable_limit: int = gs.get("consumable_slots", 2)
-
-    for i, card in enumerate(consumables):
-        if can_use_consumable(
-            card,
-            hand_cards=hand,
-            jokers=jokers,
-            consumables=consumables,
-            consumable_limit=consumable_limit,
-            joker_limit=joker_limit,
-        ):
-            actions.append(UseConsumable(card_index=i))
-    return actions
+    # Marker actions: a targeting card is offered when a legal selection
+    # exists, and like PickPackCard it still needs its targets to step.
+    return [
+        UseConsumable(card_index=i)
+        for i, card in enumerate(consumables)
+        if owned_consumable_usable(card, gs)
+    ]
